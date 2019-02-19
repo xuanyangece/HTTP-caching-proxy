@@ -1,8 +1,11 @@
 #include <arpa/inet.h>
+#include <iostream>
 #include <mutex>
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <unordered_map>
+
+#define DEVELOPMENT 1
 
 class HTTP {
 protected:
@@ -60,6 +63,9 @@ void handlehttp(int reqfd) {
   // Get request
   char buffer[40960];
   int size = recv(reqfd, buffer, 40960, 0);
+  if (DEVELOPMENT) {
+    std::cout << "Buffer received in handlehttp: " << std::endl << buffer;
+  }
   std::string temp(buffer);
   HTTPRequest newreq(temp);
 
