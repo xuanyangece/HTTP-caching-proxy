@@ -18,6 +18,42 @@ class HTTP {
     virtual void parseBuffer() = 0;
     virtual void readStartLine(std::string line) = 0;
     virtual ~HTTP() {}
+
+    void readHeader(std::string lines) {
+        size_t pos;
+        std::string line;
+        while (lines.find("\r\n") != std::string::npos && lines.substr(0, lines.find("\r\n")) != "") {
+            pos = lines.find("\r\n");
+            line = lines.substr(0, pos);
+
+            size_t colon = line.find(": ");
+            if (colon == std::string::npos) {
+                colon = line.find(":");
+                if (colon == std::string::npos) {
+                    std::cout<<"Error in format of header"<<std::endl;
+                    return;
+                }
+                else {
+                    std::string key = line.substr(0, colon);
+                    std::string value = line.substr(colon + 1);
+                    header[key] = value;
+
+                    if (DEVELOPMENT) std::cout<<"Key: "<<key<<" & Value: "<<value<<std::endl;
+                }
+            }
+            else {
+                std::string key = line.substr(0, colon);
+                std::string value = line.substr(colon + 2);
+                header[key] = value;
+
+                if (DEVELOPMENT) std::cout<<"Key: "<<key<<" & Value: "<<value<<std::endl;
+            }
+
+            lines.erase(0, pos + 2);
+        }
+        
+        if (DEVELOPMENT) std::cout<<"After read header, total "<<header.size()<<" headers"<<std::endl;
+    }
 };
 
 class HTTPRequest: public HTTP {
@@ -31,13 +67,14 @@ class HTTPRequest: public HTTP {
     }
 
     virtual void parseBuffer() {
-        // Read start line
-        size_t pos = buffer.find("\r\n");
+        std::string temp = buffer;
+        // Parse start line
+        size_t pos = temp.find("\r\n");
         if (pos == std::string::npos) {
             std::cout<<"Error parsing first line"<<std::endl;
             return;
         }
-        startline = buffer.substr(0, pos);
+        startline = temp.substr(0, pos);
 
         if (DEVELOPMENT) {
             std::cout<<"Startline is: "<<startline<<std::endl;
@@ -48,12 +85,17 @@ class HTTPRequest: public HTTP {
         if (DEVELOPMENT) {
             std::cout<<"After read startline, method is: "<<method<<std::endl;
             std::cout<<"And url is: "<<url<<std::endl;
-            std::cout<<"And HTTP version is: "<<HTTPversion<<std::endl;
+            std::cout<<"And HTTP version is: "<<HTTPversion<<std::endl<<std::endl;
         }
 
-        pos += 2;
+        temp.erase(0, pos + 2);
 
-        // Read header
+        if (DEVELOPMENT) {
+            std::cout<<"Erase startline, the rest is: "<<std::endl<<temp<<std::endl;
+        }
+
+        // Parse header
+        readHeader(temp);
 
         // Read body
     }
@@ -124,6 +166,8 @@ void handlehttp(int reqfd) {
     std::string temp(buffer);
     HTTPRequest newreq(temp);
     newreq.parseBuffer();
+
+    // Check cache
 
     // Send request
 
