@@ -7,6 +7,7 @@
 
 #define DEVELOPMENT 1
 
+
 class HTTP {
     protected:
     std::string buffer;
@@ -66,8 +67,28 @@ class HTTPRequest: public HTTP {
     std::string url;
 
     public:
+    HTTPRequest() {}
+
     HTTPRequest(std::string temp) {
         buffer = temp;
+        parseBuffer();
+    }
+
+    HTTPRequest(const HTTPRequest & rhs) {
+        buffer = rhs.buffer;
+        parseBuffer();
+    }
+
+    HTTPRequest & operator=(const HTTPRequest & rhs) {
+        if (this != &rhs) {
+            buffer = rhs.buffer;
+            parseBuffer();
+        }
+        return *this;
+    }
+
+    std::string getBuffer() {
+        return buffer;
     }
 
     virtual void parseBuffer() {
@@ -131,6 +152,8 @@ class HTTPRequest: public HTTP {
         }
     }
 
+
+
 };
 
 class HTTPResponse: public HTTP {
@@ -138,8 +161,27 @@ class HTTPResponse: public HTTP {
     std::string code;
     std::string reason;
     public:
+    HTTPResponse() {}
+
     HTTPResponse(std::string temp) {
         buffer = temp;
+    }
+
+    HTTPResponse(const HTTPResponse & rhs) {
+        buffer = rhs.buffer;
+        parseBuffer();
+    }
+
+    HTTPResponse & operator=(const HTTPResponse & rhs) {
+        if (this != &rhs) {
+            buffer = rhs.buffer;
+            parseBuffer();
+        }
+        return *this;
+    }
+
+    std::string getBuffer() {
+        return buffer;
     }
 
     virtual void parseBuffer() {
@@ -219,6 +261,10 @@ class MyLock {
 
 std::unordered_map<std::string, HTTPResponse> cache;
 
+HTTPResponse getResponse(HTTPRequest request) {
+    HTTPResponse ans;
+    return ans;
+}
 
 void handlehttp(int reqfd) {
     // Get request
@@ -230,11 +276,19 @@ void handlehttp(int reqfd) {
 
     std::string temp(buffer);
     HTTPRequest newreq(temp);
-    newreq.parseBuffer();
+
+    HTTPResponse responsefound;
 
     // Check cache
+    if (cache.find(newreq.getBuffer()) != cache.end()) {
+        responsefound = cache[newreq.getBuffer()];
+    }
+    else {
+        responsefound = getResponse(newreq);
+    }
 
     // Send request
 
     // Send response
 }
+
