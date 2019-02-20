@@ -3,6 +3,7 @@
 #include <sys/types.h>
 #include <arpa/inet.h>
 #include <unordered_map>
+#include <iostream>
 
 #define DEVELOPMENT 1
 
@@ -19,7 +20,7 @@ class HTTP {
     virtual void readStartLine(std::string line) = 0;
     virtual ~HTTP() {}
 
-    void readHeader(std::string lines) {
+    std::string readHeader(std::string lines) {
         size_t pos;
         std::string line;
         while (lines.find("\r\n") != std::string::npos && lines.substr(0, lines.find("\r\n")) != "") {
@@ -31,7 +32,7 @@ class HTTP {
                 colon = line.find(":");
                 if (colon == std::string::npos) {
                     std::cout<<"Error in format of header"<<std::endl;
-                    return;
+                    return "";
                 }
                 else {
                     std::string key = line.substr(0, colon);
@@ -53,6 +54,9 @@ class HTTP {
         }
         
         if (DEVELOPMENT) std::cout<<"After read header, total "<<header.size()<<" headers"<<std::endl;
+        lines.erase(0, 2);
+        if (DEVELOPMENT) std::cout<<"Remain body: "<<lines<<std::endl;
+        return lines;
     }
 };
 
@@ -94,10 +98,8 @@ class HTTPRequest: public HTTP {
             std::cout<<"Erase startline, the rest is: "<<std::endl<<temp<<std::endl;
         }
 
-        // Parse header
-        readHeader(temp);
-
-        // Read body
+        // Parse header & get body
+        body = readHeader(temp);        
     }
 
     virtual void readStartLine(std::string line) {

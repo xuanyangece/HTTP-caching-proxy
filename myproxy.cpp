@@ -1,4 +1,3 @@
-#include <iostream>
 #include <sys/select.h>
 #include <unistd.h>
 #include <netdb.h> // gethostbyname
@@ -82,7 +81,6 @@ int main(int argc, char ** argv) {
         // Create thread to handle request
         MyLock lk(&mymutex);
 
-        
         handlehttp(reqfd);
 
         if (DEVELOPMENT) {
