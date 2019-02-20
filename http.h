@@ -133,10 +133,69 @@ class HTTPRequest: public HTTP {
 
 };
 
-class HTTPResponse {
+class HTTPResponse: public HTTP {
     private:
-    int code;
-    std::string readon;
+    std::string code;
+    std::string reason;
+    public:
+    HTTPResponse(std::string temp) {
+        buffer = temp;
+    }
+
+    virtual void parseBuffer() {
+
+        std::string temp = buffer;
+        // Parse start line
+        size_t pos = temp.find("\r\n");
+        if (pos == std::string::npos) {
+            std::cout<<"Error parsing first line"<<std::endl;
+            return;
+        }
+        startline = temp.substr(0, pos);
+
+        if (DEVELOPMENT) {
+            std::cout<<"Startline is: "<<startline<<std::endl;
+        }
+
+        readStartLine(startline);
+    
+        if (DEVELOPMENT) {
+            std::cout<<"After read startline, HTTP version is: "<<HTTPversion<<std::endl;
+            std::cout<<"And code is: "<<code<<std::endl;
+            std::cout<<"And reason is: "<<reason<<std::endl<<std::endl;
+        }
+
+        temp.erase(0, pos + 2);
+
+        if (DEVELOPMENT) {
+            std::cout<<"Erase startline, the rest is: "<<std::endl<<temp<<std::endl;
+        }
+
+        // Parse header & get body
+        body = readHeader(temp); 
+    }
+
+    virtual void readStartLine(std::string line) {
+        // Read HTTP version
+        size_t pos = line.find(" ");
+        if (pos == std::string::npos) {
+            std::cout<<"Error in reading method"<<std::endl;
+            return;
+        }
+
+        HTTPversion = line.substr(0, pos);
+        line.erase(0, pos + 1);
+
+        // Read code
+        pos = line.find(" ");
+        if (pos == std::string::npos) {
+            std::cout<<"Error in reading url"<<std::endl;
+            return;
+        }
+
+        code = line.substr(0, pos);
+        line.erase(0, pos + 1);
+    }
 };
 
 
@@ -156,6 +215,10 @@ class MyLock {
     }
 };
 //END_REF
+
+
+std::unordered_map<std::string, HTTPResponse> cache;
+
 
 void handlehttp(int reqfd) {
     // Get request
