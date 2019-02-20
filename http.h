@@ -75,11 +75,13 @@ class HTTPRequest: public HTTP {
     }
 
     HTTPRequest(const HTTPRequest & rhs) {
+        std::cout<<"Copy constructor for request"<<std::endl;
         buffer = rhs.buffer;
         parseBuffer();
     }
 
     HTTPRequest & operator=(const HTTPRequest & rhs) {
+        std::cout<<"Assignment constructor for request"<<std::endl;
         if (this != &rhs) {
             buffer = rhs.buffer;
             parseBuffer();
@@ -165,14 +167,17 @@ class HTTPResponse: public HTTP {
 
     HTTPResponse(std::string temp) {
         buffer = temp;
+        parseBuffer();
     }
 
     HTTPResponse(const HTTPResponse & rhs) {
+        std::cout<<"Copy constructor for response"<<std::endl;
         buffer = rhs.buffer;
         parseBuffer();
     }
 
     HTTPResponse & operator=(const HTTPResponse & rhs) {
+        std::cout<<"Assignment constructor for response"<<std::endl;
         if (this != &rhs) {
             buffer = rhs.buffer;
             parseBuffer();
@@ -284,7 +289,8 @@ void handlehttp(int reqfd) {
         responsefound = cache[newreq.getBuffer()];
     }
     else {
-        responsefound = getResponse(newreq);
+        std::cout<<"Give him a new response"<<std::endl;
+        //responsefound = getResponse(newreq);
     }
 
     // Send request
