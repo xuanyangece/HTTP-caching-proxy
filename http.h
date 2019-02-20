@@ -4,8 +4,12 @@
 #include <arpa/inet.h>
 #include <unordered_map>
 #include <iostream>
+#include <netdb.h>
+#include <cstring>
 
 #define DEVELOPMENT 1
+
+#define BUFFSIZE 40960
 
 
 class HTTP {
@@ -40,7 +44,7 @@ class HTTP {
                     std::string value = line.substr(colon + 1);
                     header[key] = value;
 
-                    if (DEVELOPMENT) std::cout<<"Key: "<<key<<" & Value: "<<value<<std::endl;
+                    if (DEVELOPMENT > 1) std::cout<<"Key: "<<key<<" & Value: "<<value<<std::endl;
                 }
             }
             else {
@@ -48,7 +52,7 @@ class HTTP {
                 std::string value = line.substr(colon + 2);
                 header[key] = value;
 
-                if (DEVELOPMENT) std::cout<<"Key: "<<key<<" & Value: "<<value<<std::endl;
+                if (DEVELOPMENT > 1) std::cout<<"Key: "<<key<<" & Value: "<<value<<std::endl;
             }
 
             lines.erase(0, pos + 2);
@@ -56,8 +60,16 @@ class HTTP {
         
         if (DEVELOPMENT) std::cout<<"After read header, total "<<header.size()<<" headers"<<std::endl;
         lines.erase(0, 2);
-        if (DEVELOPMENT) std::cout<<"Remain body: "<<lines<<std::endl;
+        if (DEVELOPMENT > 1) std::cout<<"Remain body: "<<lines<<std::endl;
         return lines;
+    }
+
+    std::unordered_map<std::string, std::string> getheader(){
+        return header;
+    }
+
+    std::string getBuffer() {
+        return buffer;
     }
 };
 
@@ -75,13 +87,11 @@ class HTTPRequest: public HTTP {
     }
 
     HTTPRequest(const HTTPRequest & rhs) {
-        std::cout<<"Copy constructor for request"<<std::endl;
         buffer = rhs.buffer;
         parseBuffer();
     }
 
     HTTPRequest & operator=(const HTTPRequest & rhs) {
-        std::cout<<"Assignment constructor for request"<<std::endl;
         if (this != &rhs) {
             buffer = rhs.buffer;
             parseBuffer();
@@ -89,9 +99,7 @@ class HTTPRequest: public HTTP {
         return *this;
     }
 
-    std::string getBuffer() {
-        return buffer;
-    }
+
 
     virtual void parseBuffer() {
         std::string temp = buffer;
@@ -109,7 +117,7 @@ class HTTPRequest: public HTTP {
 
         readStartLine(startline);
 
-        if (DEVELOPMENT) {
+        if (DEVELOPMENT > 1) {
             std::cout<<"After read startline, method is: "<<method<<std::endl;
             std::cout<<"And url is: "<<url<<std::endl;
             std::cout<<"And HTTP version is: "<<HTTPversion<<std::endl<<std::endl;
@@ -117,7 +125,7 @@ class HTTPRequest: public HTTP {
 
         temp.erase(0, pos + 2);
 
-        if (DEVELOPMENT) {
+        if (DEVELOPMENT > 1) {
             std::cout<<"Erase startline, the rest is: "<<std::endl<<temp<<std::endl;
         }
 
@@ -171,22 +179,16 @@ class HTTPResponse: public HTTP {
     }
 
     HTTPResponse(const HTTPResponse & rhs) {
-        std::cout<<"Copy constructor for response"<<std::endl;
         buffer = rhs.buffer;
         parseBuffer();
     }
 
     HTTPResponse & operator=(const HTTPResponse & rhs) {
-        std::cout<<"Assignment constructor for response"<<std::endl;
         if (this != &rhs) {
             buffer = rhs.buffer;
             parseBuffer();
         }
         return *this;
-    }
-
-    std::string getBuffer() {
-        return buffer;
     }
 
     virtual void parseBuffer() {
@@ -206,7 +208,7 @@ class HTTPResponse: public HTTP {
 
         readStartLine(startline);
     
-        if (DEVELOPMENT) {
+        if (DEVELOPMENT > 1) {
             std::cout<<"After read startline, HTTP version is: "<<HTTPversion<<std::endl;
             std::cout<<"And code is: "<<code<<std::endl;
             std::cout<<"And reason is: "<<reason<<std::endl<<std::endl;
@@ -214,7 +216,7 @@ class HTTPResponse: public HTTP {
 
         temp.erase(0, pos + 2);
 
-        if (DEVELOPMENT) {
+        if (DEVELOPMENT > 1) {
             std::cout<<"Erase startline, the rest is: "<<std::endl<<temp<<std::endl;
         }
 
@@ -242,6 +244,9 @@ class HTTPResponse: public HTTP {
 
         code = line.substr(0, pos);
         line.erase(0, pos + 1);
+
+        // Read reason
+        reason = line;
     }
 };
 
@@ -267,15 +272,66 @@ class MyLock {
 std::unordered_map<std::string, HTTPResponse> cache;
 
 HTTPResponse getResponse(HTTPRequest request) {
-    HTTPResponse ans;
+    // Get hostname
+    std::unordered_map<std::string, std::string> reqheader = request.getheader();
+    std::string host = reqheader["Host"];
+
+    if (DEVELOPMENT) std::cout<<"Host is: "<<host<<std::endl;
+
+    int status;
+    int web_fd;
+    struct addrinfo host_info;
+    struct addrinfo *host_info_list;
+    const char *hostname =host.c_str();
+    const char *port = "80";
+
+    memset(&host_info, 0 , sizeof(host_info));
+    host_info.ai_family   = AF_INET;
+    host_info.ai_socktype = SOCK_STREAM;
+
+    status = getaddrinfo(hostname, port, &host_info, &host_info_list);
+    if (status != 0) {
+        std::cerr << "Error: cannot get address info for host" << std::endl;
+    }
+
+    web_fd = socket(host_info_list->ai_family,
+                        host_info_list->ai_socktype,
+                        host_info_list->ai_protocol);
+
+    if (web_fd == -1) {
+        std::cerr << "Error: cannot create socket to the web" << std::endl;
+    }
+
+    if (DEVELOPMENT > 2) std::cout << "Connecting to " << hostname << " on port " << port << "..." << std::endl;
+
+    status = connect(web_fd, host_info_list->ai_addr, host_info_list->ai_addrlen);
+    if (status == -1) {
+        std::cerr << "Error: cannot connect to socket to the web" << std::endl;
+    }
+
+    if (DEVELOPMENT > 2) std::cout << "Connected to web" << std::endl;
+
+    int sizesend = send(web_fd, request.getBuffer().c_str(), BUFFSIZE, 0);
+
+    if (DEVELOPMENT > 2) std::cout<<"Request send to web: "<<std::endl; 
+
+    char resbuffer[BUFFSIZE];
+
+    int sizerecv = recv(web_fd, resbuffer, BUFFSIZE, 0);
+
+    if (DEVELOPMENT) std::cout<<"Buffer received from real server: "<<std::endl<<resbuffer<<std::endl;
+
+    // Construct response
+    HTTPResponse ans(resbuffer);
+
     return ans;
 }
 
 void handlehttp(int reqfd) {
     // Get request
-    char buffer[40960];
-    int size = recv(reqfd, buffer, 40960, 0);
-    if (DEVELOPMENT) {
+    char buffer[BUFFSIZE];
+    int size = recv(reqfd, buffer, BUFFSIZE, 0);
+    if (DEVELOPMENT > 1) {
         std::cout<<"Buffer received in handlehttp: "<<std::endl<<buffer;
     }
 
@@ -284,16 +340,14 @@ void handlehttp(int reqfd) {
 
     HTTPResponse responsefound;
 
-    // Check cache
+    // Check cache & send request
     if (cache.find(newreq.getBuffer()) != cache.end()) {
         responsefound = cache[newreq.getBuffer()];
     }
     else {
-        std::cout<<"Give him a new response"<<std::endl;
-        //responsefound = getResponse(newreq);
+        std::cout<<"\nGive him a new response"<<std::endl;
+        responsefound = getResponse(newreq);
     }
-
-    // Send request
 
     // Send response
 }

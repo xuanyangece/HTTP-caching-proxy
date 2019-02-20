@@ -4,9 +4,9 @@
 #include <netinet/in.h>
 #include <mutex>
 #include "http.h"
-#include <cstring>
 
-#define PORT 7654
+
+#define PORT 12345
 
 #define DEVELOPMENT 1
 
@@ -42,7 +42,7 @@ int main(int argc, char ** argv) {
     char *serIP;
     // get from h_addr
     serIP = inet_ntoa(*(struct in_addr *)hent->h_addr);
-    if (DEVELOPMENT) std::cout<<"Proxy IP: "<<serIP<<std::endl;
+    if (DEVELOPMENT) std::cout<<"Proxy IP: "<<serIP<<std::endl<<std::endl;
 
     // Initial memory address
     memset(&proxyaddr, '\0', sizeof(proxyaddr));
