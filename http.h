@@ -276,6 +276,13 @@ HTTPResponse getResponse(HTTPRequest request) {
     std::unordered_map<std::string, std::string> reqheader = request.getheader();
     std::string host = reqheader["Host"];
 
+    // https
+    size_t s;
+    if (host.find(":443") != std::string::npos) {
+        s = host.find(":443");
+        host = host.substr(0, s);
+    }
+
     if (DEVELOPMENT) std::cout<<"Host is: "<<host<<std::endl;
 
     int status;
