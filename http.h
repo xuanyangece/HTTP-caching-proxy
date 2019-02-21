@@ -6,6 +6,7 @@
 #include <iostream>
 #include <netdb.h>
 #include <cstring>
+#include <string>
 
 #define DEVELOPMENT 1
 
@@ -72,6 +73,93 @@ class HTTP {
         return buffer;
     }
 };
+
+class HTTPResponse: public HTTP {
+    private:
+    std::string code;
+    std::string reason;
+    public:
+    HTTPResponse() {}
+
+    HTTPResponse(std::string temp) {
+        buffer = temp;
+        parseBuffer();
+    }
+
+    HTTPResponse(const HTTPResponse & rhs) {
+        buffer = rhs.buffer;
+        parseBuffer();
+    }
+
+    HTTPResponse & operator=(const HTTPResponse & rhs) {
+        if (this != &rhs) {
+            buffer = rhs.buffer;
+            parseBuffer();
+        }
+        return *this;
+    }
+
+    virtual void parseBuffer() {
+
+        std::string temp = buffer;
+        // Parse start line
+        size_t pos = temp.find("\r\n");
+        if (pos == std::string::npos) {
+            std::cout<<"Error parsing first line"<<std::endl;
+            return;
+        }
+        startline = temp.substr(0, pos);
+
+        if (DEVELOPMENT) {
+            std::cout<<"Startline is: "<<startline<<std::endl;
+        }
+
+        readStartLine(startline);
+    
+        if (DEVELOPMENT > 1) {
+            std::cout<<"After read startline, HTTP version is: "<<HTTPversion<<std::endl;
+            std::cout<<"And code is: "<<code<<std::endl;
+            std::cout<<"And reason is: "<<reason<<std::endl<<std::endl;
+        }
+
+        temp.erase(0, pos + 2);
+
+        if (DEVELOPMENT > 1) {
+            std::cout<<"Erase startline, the rest is: "<<std::endl<<temp<<std::endl;
+        }
+
+        // Parse header & get body
+        body = readHeader(temp); 
+    }
+
+    virtual void readStartLine(std::string line) {
+        // Read HTTP version
+        size_t pos = line.find(" ");
+        if (pos == std::string::npos) {
+            std::cout<<"Error in reading method"<<std::endl;
+            return;
+        }
+
+        HTTPversion = line.substr(0, pos);
+        line.erase(0, pos + 1);
+
+        // Read code
+        pos = line.find(" ");
+        if (pos == std::string::npos) {
+            std::cout<<"Error in reading url"<<std::endl;
+            return;
+        }
+
+        code = line.substr(0, pos);
+        line.erase(0, pos + 1);
+
+        // Read reason
+        reason = line;
+    }
+};
+
+std::unordered_map<std::string, HTTPResponse> cache;
+
 
 class HTTPRequest: public HTTP {
     private:
@@ -164,26 +252,46 @@ class HTTPRequest: public HTTP {
 
     void handlereq(int client_fd) {
         if (method == "GET") {
-            doGET();
+            doGET(client_fd);
         }
         else if (method == "POST") {
-            doPOST();
+            doPOST(client_fd);
         }
         else if (method == "CONNECT") {
             doCONNECT(client_fd);
         }
     }
 
-    void doGET() {
-        // Check cache
+    void doGET(int client_fd) {
+        HTTPResponse responsefound;
+
+        // Check cache & send request
+        if (cache.find(getBuffer()) != cache.end()) {
+            responsefound = cache[getBuffer()];
+        }
+        else {
+            responsefound = getResponse();
+            cache[getBuffer()] = responsefound;
+        }
 
         // Send back
+        int ret = send(client_fd, responsefound.getBuffer().c_str(), BUFFSIZE, 0);
     }
 
-    void doPOST() {
-        // Check cache
+    void doPOST(int client_fd) {
+        HTTPResponse responsefound;
+
+        // Check cache & send request
+        if (cache.find(getBuffer()) != cache.end()) {
+            responsefound = cache[getBuffer()];
+        }
+        else {
+            responsefound = getResponse();
+            cache[getBuffer()] = responsefound;
+        }
 
         // Send back
+        int ret = send(client_fd, responsefound.getBuffer().c_str(), BUFFSIZE, 0);
     }
 
     void doCONNECT(int client_fd) {
@@ -192,124 +300,10 @@ class HTTPRequest: public HTTP {
         // Then back and force
     }
 
-};
-
-class HTTPResponse: public HTTP {
-    private:
-    std::string code;
-    std::string reason;
-    public:
-    HTTPResponse() {}
-
-    HTTPResponse(std::string temp) {
-        buffer = temp;
-        parseBuffer();
-    }
-
-    HTTPResponse(const HTTPResponse & rhs) {
-        buffer = rhs.buffer;
-        parseBuffer();
-    }
-
-    HTTPResponse & operator=(const HTTPResponse & rhs) {
-        if (this != &rhs) {
-            buffer = rhs.buffer;
-            parseBuffer();
-        }
-        return *this;
-    }
-
-    virtual void parseBuffer() {
-
-        std::string temp = buffer;
-        // Parse start line
-        size_t pos = temp.find("\r\n");
-        if (pos == std::string::npos) {
-            std::cout<<"Error parsing first line"<<std::endl;
-            return;
-        }
-        startline = temp.substr(0, pos);
-
-        if (DEVELOPMENT) {
-            std::cout<<"Startline is: "<<startline<<std::endl;
-        }
-
-        readStartLine(startline);
-    
-        if (DEVELOPMENT > 1) {
-            std::cout<<"After read startline, HTTP version is: "<<HTTPversion<<std::endl;
-            std::cout<<"And code is: "<<code<<std::endl;
-            std::cout<<"And reason is: "<<reason<<std::endl<<std::endl;
-        }
-
-        temp.erase(0, pos + 2);
-
-        if (DEVELOPMENT > 1) {
-            std::cout<<"Erase startline, the rest is: "<<std::endl<<temp<<std::endl;
-        }
-
-        // Parse header & get body
-        body = readHeader(temp); 
-    }
-
-    virtual void readStartLine(std::string line) {
-        // Read HTTP version
-        size_t pos = line.find(" ");
-        if (pos == std::string::npos) {
-            std::cout<<"Error in reading method"<<std::endl;
-            return;
-        }
-
-        HTTPversion = line.substr(0, pos);
-        line.erase(0, pos + 1);
-
-        // Read code
-        pos = line.find(" ");
-        if (pos == std::string::npos) {
-            std::cout<<"Error in reading url"<<std::endl;
-            return;
-        }
-
-        code = line.substr(0, pos);
-        line.erase(0, pos + 1);
-
-        // Read reason
-        reason = line;
-    }
-};
-
-
-//BEGIN_REF - https://www.youtube.com/watch?v=ojOUIg13g3I&t=543s
-class MyLock {
-    private:
-    std::mutex * mtx;
-    public:
-
-    explicit MyLock(std::mutex * temp) {
-        temp->lock();
-        mtx = temp;
-    }
-
-    ~MyLock() {
-        mtx->unlock();
-    }
-};
-//END_REF
-
-
-std::unordered_map<std::string, HTTPResponse> cache;
-
-HTTPResponse getResponse(HTTPRequest request) {
+   HTTPResponse getResponse() {
     // Get hostname
-    std::unordered_map<std::string, std::string> reqheader = request.getheader();
+    std::unordered_map<std::string, std::string> reqheader = getheader();
     std::string host = reqheader["Host"];
-
-    // https
-    size_t s;
-    if (host.find(":443") != std::string::npos) {
-        s = host.find(":443");
-        host = host.substr(0, s);
-    }
 
     if (DEVELOPMENT) std::cout<<"Host is: "<<host<<std::endl;
 
@@ -346,7 +340,7 @@ HTTPResponse getResponse(HTTPRequest request) {
 
     if (DEVELOPMENT > 2) std::cout << "Connected to web" << std::endl;
 
-    int sizesend = send(web_fd, request.getBuffer().c_str(), BUFFSIZE, 0);
+    int sizesend = send(web_fd, getBuffer().c_str(), BUFFSIZE, 0);
 
     if (DEVELOPMENT > 2) std::cout<<"Request send to web: "<<std::endl; 
 
@@ -360,7 +354,29 @@ HTTPResponse getResponse(HTTPRequest request) {
     HTTPResponse ans(resbuffer);
 
     return ans;
-}
+   }
+};
+
+
+
+
+//BEGIN_REF - https://www.youtube.com/watch?v=ojOUIg13g3I&t=543s
+class MyLock {
+    private:
+    std::mutex * mtx;
+    public:
+
+    explicit MyLock(std::mutex * temp) {
+        temp->lock();
+        mtx = temp;
+    }
+
+    ~MyLock() {
+        mtx->unlock();
+    }
+};
+//END_REF
+
 
 void handlehttp(int reqfd) {
     // Get request
@@ -373,6 +389,7 @@ void handlehttp(int reqfd) {
     std::string temp(buffer);
     HTTPRequest newreq(temp);
 
+    // Handle request
     newreq.handlereq(reqfd);
 }
 
