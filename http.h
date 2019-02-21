@@ -162,7 +162,35 @@ class HTTPRequest: public HTTP {
         }
     }
 
+    void handlereq(int client_fd) {
+        if (method == "GET") {
+            doGET();
+        }
+        else if (method == "POST") {
+            doPOST();
+        }
+        else if (method == "CONNECT") {
+            doCONNECT(client_fd);
+        }
+    }
 
+    void doGET() {
+        // Check cache
+
+        // Send back
+    }
+
+    void doPOST() {
+        // Check cache
+
+        // Send back
+    }
+
+    void doCONNECT(int client_fd) {
+        // New socket
+
+        // Then back and force
+    }
 
 };
 
@@ -345,17 +373,6 @@ void handlehttp(int reqfd) {
     std::string temp(buffer);
     HTTPRequest newreq(temp);
 
-    HTTPResponse responsefound;
-
-    // Check cache & send request
-    if (cache.find(newreq.getBuffer()) != cache.end()) {
-        responsefound = cache[newreq.getBuffer()];
-    }
-    else {
-        std::cout<<"\nGive him a new response"<<std::endl;
-        responsefound = getResponse(newreq);
-    }
-
-    // Send response
+    newreq.handlereq(reqfd);
 }
 
