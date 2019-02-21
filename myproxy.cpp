@@ -85,10 +85,11 @@ int main(int argc, char ** argv) {
 
         if (DEVELOPMENT) {
             std::cout<<"Finish service, close connection"<<std::endl;
+            close(sockfd);
             close(reqfd);
             exit(1);
         }
-
+        close(sockfd);
         close(reqfd);
     }
 

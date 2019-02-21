@@ -20,7 +20,11 @@ std::vector<char> myrecv(int myfd) {
     std::vector<char> tempseg(TEMPSIZE);
 
     while (1) {
+        //std::cout<<"In myrecv loop"<<std::endl;
         int segsize = recv(myfd, &tempseg.data()[0], TEMPSIZE, 0);
+
+        //std::cout<<"Segsize: "<<segsize<<std::endl;
+        //std::cout<<"temp is: "<<tempseg.data()<<std::endl;
 
         if (segsize < 0) {
             std::cout<<"Error in receive request"<<std::endl;
@@ -28,16 +32,19 @@ std::vector<char> myrecv(int myfd) {
             exit(1);
         }
 
-        // Received everything including '\0'
-        if (segsize == 0) {
-            break;
-        }
-
         for (int i = 0; i < segsize; i++) {
             tempbuf.push_back(tempseg[i]);
         }
 
+        //std::cout<<"Tempbuf size: "<<tempbuf.size()<<std::endl;
+
         tempseg.clear();
+
+        if (segsize < TEMPSIZE) {  // Finish receive
+            break;
+        } else if (segsize == TEMPSIZE && tempbuf[tempbuf.size() - 1] == '\0') {  // Corner case: size = N * 256
+            break;
+        }
     }
 
     return tempbuf;
@@ -90,7 +97,7 @@ class HTTP {
             lines.erase(0, pos + 2);
         }
         
-        if (DEVELOPMENT) std::cout<<"After read header, total "<<header.size()<<" headers"<<std::endl;
+        if (DEVELOPMENT > 1) std::cout<<"After read header, total "<<header.size()<<" headers"<<std::endl;
         lines.erase(0, 2);
         if (DEVELOPMENT > 1) std::cout<<"Remain body: "<<lines<<std::endl;
         return lines;
@@ -133,7 +140,7 @@ class HTTPResponse: public HTTP {
     virtual void parseBuffer() {
 
         std::string temp = buffer.data();
-        
+
         // Parse start line
         size_t pos = temp.find("\r\n");
         if (pos == std::string::npos) {
@@ -142,7 +149,7 @@ class HTTPResponse: public HTTP {
         }
         startline = temp.substr(0, pos);
 
-        if (DEVELOPMENT) {
+        if (DEVELOPMENT > 1) {
             std::cout<<"Startline is: "<<startline<<std::endl;
         }
 
@@ -308,7 +315,7 @@ class HTTPRequest: public HTTP {
             cache[bufstr] = responsefound;
         }
 
-        if (DEVELOPMENT) std::cout<<"Content sent back is: "<<std::endl<<responsefound.getBuffer().data()<<std::endl;
+        if (DEVELOPMENT > 1) std::cout<<"Content sent back is: "<<std::endl<<responsefound.getBuffer().data()<<std::endl;
 
         // Send back
         int ret = send(client_fd, &responsefound.getBuffer().data()[0], responsefound.getBuffer().size(), 0);
@@ -389,6 +396,10 @@ class HTTPRequest: public HTTP {
 
     // Construct response
     HTTPResponse ans(tempbuf);
+
+    // Close & clear
+    freeaddrinfo(host_info_list);
+    close(web_fd);
 
     return ans;
    }
