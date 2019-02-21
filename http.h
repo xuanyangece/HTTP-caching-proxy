@@ -7,15 +7,46 @@
 #include <netdb.h>
 #include <cstring>
 #include <string>
+#include <vector>
 
 #define DEVELOPMENT 1
 
-#define BUFFSIZE 40960
+#define BUFFSIZE 1024
+#define TEMPSIZE 256
+
+std::vector<char> myrecv(int myfd) {
+    // Get request
+    std::vector<char> tempbuf;
+    std::vector<char> tempseg(TEMPSIZE);
+
+    while (1) {
+        int segsize = recv(myfd, &tempseg.data()[0], TEMPSIZE, 0);
+
+        if (segsize < 0) {
+            std::cout<<"Error in receive request"<<std::endl;
+            close(myfd);
+            exit(1);
+        }
+
+        // Received everything including '\0'
+        if (segsize == 0) {
+            break;
+        }
+
+        for (int i = 0; i < segsize; i++) {
+            tempbuf.push_back(tempseg[i]);
+        }
+
+        tempseg.clear();
+    }
+
+    return tempbuf;
+}
 
 
 class HTTP {
     protected:
-    std::string buffer;
+    std::vector<char> buffer;
     std::string startline;
     std::unordered_map<std::string, std::string> header;
     std::string body;
@@ -69,7 +100,7 @@ class HTTP {
         return header;
     }
 
-    std::string getBuffer() {
+    std::vector<char> getBuffer() {
         return buffer;
     }
 };
@@ -81,7 +112,7 @@ class HTTPResponse: public HTTP {
     public:
     HTTPResponse() {}
 
-    HTTPResponse(std::string temp) {
+    HTTPResponse(std::vector<char> temp) {
         buffer = temp;
         parseBuffer();
     }
@@ -101,7 +132,8 @@ class HTTPResponse: public HTTP {
 
     virtual void parseBuffer() {
 
-        std::string temp = buffer;
+        std::string temp = buffer.data();
+        
         // Parse start line
         size_t pos = temp.find("\r\n");
         if (pos == std::string::npos) {
@@ -169,7 +201,7 @@ class HTTPRequest: public HTTP {
     public:
     HTTPRequest() {}
 
-    HTTPRequest(std::string temp) {
+    HTTPRequest(std::vector<char> temp) {
         buffer = temp;
         parseBuffer();
     }
@@ -190,7 +222,8 @@ class HTTPRequest: public HTTP {
 
 
     virtual void parseBuffer() {
-        std::string temp = buffer;
+        std::string temp = buffer.data();
+
         // Parse start line
         size_t pos = temp.find("\r\n");
         if (pos == std::string::npos) {
@@ -266,32 +299,38 @@ class HTTPRequest: public HTTP {
         HTTPResponse responsefound;
 
         // Check cache & send request
-        if (cache.find(getBuffer()) != cache.end()) {
-            responsefound = cache[getBuffer()];
+        std::string bufstr = getBuffer().data();
+        if (cache.find(bufstr) != cache.end()) {
+            responsefound = cache[bufstr];
         }
         else {
             responsefound = getResponse();
-            cache[getBuffer()] = responsefound;
+            cache[bufstr] = responsefound;
         }
 
+        if (DEVELOPMENT) std::cout<<"Content sent back is: "<<std::endl<<responsefound.getBuffer().data()<<std::endl;
+
         // Send back
-        int ret = send(client_fd, responsefound.getBuffer().c_str(), BUFFSIZE, 0);
+        int ret = send(client_fd, &responsefound.getBuffer().data()[0], responsefound.getBuffer().size(), 0);
     }
 
     void doPOST(int client_fd) {
         HTTPResponse responsefound;
 
         // Check cache & send request
-        if (cache.find(getBuffer()) != cache.end()) {
-            responsefound = cache[getBuffer()];
+        std::string bufstr = getBuffer().data();
+        if (cache.find(bufstr) != cache.end()) {
+            responsefound = cache[bufstr];
         }
         else {
             responsefound = getResponse();
-            cache[getBuffer()] = responsefound;
+            cache[bufstr] = responsefound;
         }
 
+        if (DEVELOPMENT) std::cout<<"Content sent back is: "<<std::endl<<responsefound.getBuffer().data()<<std::endl;
+
         // Send back
-        int ret = send(client_fd, responsefound.getBuffer().c_str(), BUFFSIZE, 0);
+        int ret = send(client_fd, &responsefound.getBuffer().data()[0], responsefound.getBuffer().size(), 0);
     }
 
     void doCONNECT(int client_fd) {
@@ -340,18 +379,16 @@ class HTTPRequest: public HTTP {
 
     if (DEVELOPMENT > 2) std::cout << "Connected to web" << std::endl;
 
-    int sizesend = send(web_fd, getBuffer().c_str(), BUFFSIZE, 0);
+    int sizesend = send(web_fd, &getBuffer().data()[0], getBuffer().size(), 0);
 
     if (DEVELOPMENT > 2) std::cout<<"Request send to web: "<<std::endl; 
 
-    char resbuffer[BUFFSIZE];
+    std::vector<char> tempbuf = myrecv(web_fd);
 
-    int sizerecv = recv(web_fd, resbuffer, BUFFSIZE, 0);
-
-    if (DEVELOPMENT) std::cout<<"Buffer received from real server: "<<std::endl<<resbuffer<<std::endl;
+    if (DEVELOPMENT) std::cout<<"Buffer received from real server: "<<std::endl<<tempbuf.data()<<std::endl;
 
     // Construct response
-    HTTPResponse ans(resbuffer);
+    HTTPResponse ans(tempbuf);
 
     return ans;
    }
@@ -378,16 +415,15 @@ class MyLock {
 //END_REF
 
 
+
+
 void handlehttp(int reqfd) {
     // Get request
-    char buffer[BUFFSIZE];
-    int size = recv(reqfd, buffer, BUFFSIZE, 0);
-    if (DEVELOPMENT > 1) {
-        std::cout<<"Buffer received in handlehttp: "<<std::endl<<buffer;
-    }
+    std::vector<char> tempbuf = myrecv(reqfd);
 
-    std::string temp(buffer);
-    HTTPRequest newreq(temp);
+    if (DEVELOPMENT) std::cout<<"Temporary buffer got "<<tempbuf.size()<<" bytes."<<std::endl<<"The content is: "<<std::endl<<tempbuf.data()<<std::endl;
+
+    HTTPRequest newreq(tempbuf);
 
     // Handle request
     newreq.handlereq(reqfd);
