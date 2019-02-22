@@ -63,6 +63,8 @@ std::vector<char> myrecv(int myfd)
 
 void handlehttp(int reqfd)
 {
+    // MyLock lk(&mymutex);
+    
     // Get request
     std::vector<char> tempbuf = myrecv(reqfd);
 
@@ -75,4 +77,6 @@ void handlehttp(int reqfd)
 
     // Handle request
     newreq.handlereq(reqfd);
+
+    close(reqfd);
 }

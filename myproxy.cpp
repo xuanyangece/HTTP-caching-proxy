@@ -3,6 +3,7 @@
 #include <netdb.h> // gethostbyname
 #include <netinet/in.h>
 #include <mutex>
+#include <thread>
 #include "function.h"
 
 #define DEVELOPMENT 1
@@ -78,19 +79,8 @@ int main(int argc, char **argv)
             exit(1);
         }
 
-        // Create thread to handle request
-        MyLock lk(&mymutex);
-
-        handlehttp(reqfd);
-
-        if (DEVELOPMENT)
-        {
-            std::cout << "Finish service, close connection" << std::endl;
-            std::cout << "sockfd: " << sockfd << " reqfd: " << reqfd << std::endl;
-            freeaddrinfo(host_info_list);
-            close(sockfd);
-            exit(1);
-        }
+        std::thread mythread(handlehttp, reqfd);
+        mythread.detach();
     }
 
     freeaddrinfo(host_info_list);
