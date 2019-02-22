@@ -70,6 +70,10 @@ class HTTP {
         return lines;
     }
 
+    std::unordered_map<std::string, std::string>& accessHeader() {
+        return header;
+    }
+
     std::unordered_map<std::string, std::string> getheader(){
         return header;
     }
@@ -106,6 +110,52 @@ class HTTPResponse: public HTTP {
             parseBuffer();
         }
         return *this;
+    }
+
+    void reParse() {
+        std::vector<char> temp;
+
+        // parse startline
+        for (size_t i = 0; i < startline.size(); i++) {
+            temp.push_back(startline[i]);
+        }
+        temp.push_back('\r');
+        temp.push_back('\n');
+
+        // parse header
+        for (std::unordered_map<std::string, std::string>::const_iterator it = header.begin(); it != header.end(); ++it) {
+            std::string key = it->first;
+            std::string value = it->second;
+
+            // ""
+            for (size_t k = 0; k < key.size(); k++) {
+                temp.push_back(key[k]);
+            }
+
+            // "Host"
+            temp.push_back(':');
+            temp.push_back(' ');
+
+            // "Host: "
+            for (size_t v = 0; v < value.size(); v++) {
+                temp.push_back(value[v]);
+            }
+
+            // "Host: www.example.com"
+            temp.push_back('\r');
+            temp.push_back('\n');
+        }
+
+        temp.push_back('\r');
+        temp.push_back('\n');
+
+        for (size_t i = 0; i < body.size(); i++) {
+            temp.push_back(body[i]);
+        }
+
+        temp.push_back('\0');
+
+        buffer = temp;
     }
 
     virtual void parseBuffer() {

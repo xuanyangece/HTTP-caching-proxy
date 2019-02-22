@@ -1,9 +1,14 @@
 #include "http.h"
 
+#define CHUNKSIZE 4096
+
+std::vector<char> handleChunked(int myfd, std::vector<char> firstbuff);
+
 std::vector<char> myrecv(int myfd)
 {
     std::vector<char> tempbuf;
     std::vector<char> tempseg(TEMPSIZE);
+
     while (1)
     {
         //std::cout << "In myrecv loop" << std::endl;
@@ -24,7 +29,10 @@ std::vector<char> myrecv(int myfd)
         }
         
         //std::cout << "Tempbuf size: " << tempbuf.size() << std::endl;
-        tempseg.clear();
+        /*
+            May need to change to std::fill
+        */
+        std::fill(tempseg.begin(), tempseg.end(), '\0');
 
         if (segsize < TEMPSIZE || (segsize == TEMPSIZE && tempbuf[tempbuf.size() - 1] == '\0'))
         { // Finish receive
@@ -33,7 +41,15 @@ std::vector<char> myrecv(int myfd)
             std::unordered_map<std::string, std::string> tempheader = tempres.getheader();
             if (tempheader.find("Content-Length") == tempheader.end())
             {
-                break;
+                // handle chunked
+                if (tempheader.find("Transfer-Encoding") != tempheader.end() && tempheader["Transfer-Encoding"] == "chunked") {
+                    if (DEVELOPMENT) std::cout<<"\nChunked here!\n";
+                    tempbuf.pop_back();
+                    return handleChunked(myfd, tempbuf);
+                }
+                else {
+                    break;
+                }
             }
             std::string tempbody = tempres.getBody();
             //std::cout << "Body size in buffer: " << tempbody.size() << std::endl;
@@ -61,10 +77,74 @@ std::vector<char> myrecv(int myfd)
     return tempbuf;
 }
 
+std::vector<char> handleChunked(int myfd, std::vector<char> firstbuff) {
+    int length = 0;
+    std::vector<char> tempseg(CHUNKSIZE);
+    std::vector<char> tempchunk;
+
+    // firstbuff doesn't contain '\0'
+    while (1) {
+        int recvsize = recv(myfd, &tempseg.data()[0], CHUNKSIZE, 0);
+        
+        for (int i = 0; i < recvsize; i++) {
+            tempchunk.push_back(tempseg[i]);
+        }
+
+        std::fill(tempseg.begin(), tempseg.end(), '\0');
+
+        if (recvsize == CHUNKSIZE) continue;
+
+        tempchunk.push_back('\0');
+
+        // handle chunk
+        std::string chunkstr = tempchunk.data();
+        size_t linebreak = chunkstr.find("\r\n");
+        int chunk_length = std::stoi(chunkstr.substr(0, linebreak), nullptr, 16);
+        
+        length += chunk_length;
+
+        // last chunk
+        if (chunk_length == 0) {
+            // before break, add '\0'
+            firstbuff.push_back('\0');
+
+            // Receive trailer
+            while (1) {
+                int trailersize = recv(myfd, &tempseg.data()[0], CHUNKSIZE, 0);
+                std::fill(tempseg.begin(), tempseg.end(), '\0');
+                if (trailersize == CHUNKSIZE) continue;
+                break;
+            }
+            
+            // Finish content read, assembly
+            HTTPResponse tempres(firstbuff);
+            std::unordered_map<std::string, std::string> realHeader = tempres.accessHeader();
+
+            // Erase chunk header & add content-length header
+            realHeader.erase("Transfer-Encoding");
+            realHeader["Content-Length"] = std::to_string(length);
+
+            // Update temporary response's buffer
+            tempres.reParse();
+
+            return tempres.getBuffer();
+        }
+        // else parse content to firstbuff
+        else {
+            chunkstr.erase(0, linebreak + 2);
+            for (int i = 0; i < chunk_length; i++) {
+                firstbuff.push_back(tempchunk[i]);
+            }
+            tempchunk.clear();
+        }
+
+    }
+}
+
 void handlehttp(int reqfd)
 {
     // MyLock lk(&mymutex);
-    
+
     // Get request
     std::vector<char> tempbuf = myrecv(reqfd);
 
