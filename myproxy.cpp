@@ -5,77 +5,77 @@
 #include <mutex>
 #include "function.h"
 
-
-#define PORT 12345
-
 #define DEVELOPMENT 1
 
 std::mutex mymutex;
 
-int main(int argc, char ** argv) {
-    // read command line parameters
-
-
+int main(int argc, char **argv)
+{
     // Create socket
+    int status;
     int sockfd;
-    struct sockaddr_in proxyaddr;
-    socklen_t len = sizeof(proxyaddr);
-
-    sockfd = socket(AF_INET, SOCK_STREAM, 0);
-    if (DEVELOPMENT) std::cout<<"Sockfd: "<<sockfd<<std::endl;
-
-
-    // Get IP
+    struct addrinfo host_info;
+    struct addrinfo *host_info_list;
     char hostname[128];
-    if (gethostname(hostname, sizeof(hostname)) == -1) {
-        std::cout<<"Hostname access fail"<<std::endl;
+    if (gethostname(hostname, sizeof(hostname)) == -1)
+    {
+        std::cout << "Hostname access fail" << std::endl;
         exit(1);
     }
-    struct hostent *hent;
-    hent = gethostbyname(hostname);
-    if (hent == NULL) {
-        std::cout<<"Host info access fail"<<std::endl;
-        exit(1);
-    }
-    if (DEVELOPMENT) std::cout<<"Hostname: "<<hostname<<std::endl;
+    const char *port = "12345";
 
-    char *serIP;
-    // get from h_addr
-    serIP = inet_ntoa(*(struct in_addr *)hent->h_addr);
-    if (DEVELOPMENT) std::cout<<"Proxy IP: "<<serIP<<std::endl<<std::endl;
+    memset(&host_info, 0, sizeof(host_info));
 
-    // Initial memory address
-    memset(&proxyaddr, '\0', sizeof(proxyaddr));
-    proxyaddr.sin_family = AF_INET;
-    proxyaddr.sin_port = htons(PORT);
-    proxyaddr.sin_addr.s_addr = inet_addr(serIP);
+    host_info.ai_family = AF_INET;
+    host_info.ai_socktype = SOCK_STREAM;
 
-    // Bind socket to address:port
-    int ret = bind(sockfd, (struct sockaddr *)&proxyaddr, sizeof(proxyaddr));
-    if (ret < 0) {
-        std::cout<<"Error in binding"<<std::endl;
-        exit(1);
-    }
+    status = getaddrinfo(hostname, port, &host_info, &host_info_list);
+    if (status != 0)
+    {
+        std::cerr << "Error: cannot get address info for host" << std::endl;
+        std::cerr << "  (" << hostname << "," << port << ")" << std::endl;
+        return -1;
+    } //if
+
+    sockfd = socket(host_info_list->ai_family,
+                    host_info_list->ai_socktype,
+                    host_info_list->ai_protocol);
+    if (sockfd == -1)
+    {
+        std::cerr << "Error: cannot create socket" << std::endl;
+        std::cerr << "  (" << hostname << "," << port << ")" << std::endl;
+        return -1;
+    } //if
+
+    int yes = 1;
+    status = setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(int));
+    status = bind(sockfd, host_info_list->ai_addr, host_info_list->ai_addrlen);
+    if (status == -1)
+    {
+        std::cerr << "Error: cannot bind socket" << std::endl;
+        std::cerr << "  (" << hostname << "," << port << ")" << std::endl;
+        return -1;
+    } //if
 
     // Listening
-    if (listen(sockfd, 10) != 0) {
-        std::cout<<"Error in listening"<<std::endl;
+    if (listen(sockfd, 10) != 0)
+    {
+        std::cout << "Error in listening" << std::endl;
         exit(1);
     }
 
-    while (1) {
+    while (1)
+    {
         // Get address info
-        struct sockaddr_in reqaddr;
+        struct sockaddr_storage socket_addr;
+        socklen_t socket_addr_len = sizeof(socket_addr);
 
         // Accept request
-        int reqfd = accept(sockfd, (struct sockaddr *)&reqaddr, &len);
-        if (reqfd < 0) {
-            std::cout<<"Error in accept"<<std::endl;
+        int reqfd = accept(sockfd, (struct sockaddr *)&socket_addr, &socket_addr_len);
+        if (reqfd < 0)
+        {
+            std::cout << "Error in accept" << std::endl;
             exit(1);
-        }
-
-        if (DEVELOPMENT) {
-            std::cout<<"Request from "<<inet_ntoa(reqaddr.sin_addr)<<std::endl;
         }
 
         // Create thread to handle request
@@ -83,15 +83,17 @@ int main(int argc, char ** argv) {
 
         handlehttp(reqfd);
 
-        if (DEVELOPMENT) {
-            std::cout<<"Finish service, close connection"<<std::endl;
-            std::cout<<"sockfd: "<<sockfd<<" reqfd: "<<reqfd<<std::endl;
+        if (DEVELOPMENT)
+        {
+            std::cout << "Finish service, close connection" << std::endl;
+            std::cout << "sockfd: " << sockfd << " reqfd: " << reqfd << std::endl;
+            freeaddrinfo(host_info_list);
             close(sockfd);
             exit(1);
         }
-        
     }
 
+    freeaddrinfo(host_info_list);
     close(sockfd);
     return 0;
 }
