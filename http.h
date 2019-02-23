@@ -253,6 +253,10 @@ class HTTPResponse : public HTTP
         // Read reason
         reason = line;
     }
+
+    std::string getCode() {
+        return code;
+    }
 };
 
 std::unordered_map<std::string, HTTPResponse> cache;
@@ -386,11 +390,20 @@ class HTTPRequest : public HTTP
         if (cache.find(bufstr) != cache.end())
         {
             responsefound = cache[bufstr];
+            
+            // Check cache-control
+
+            // Check expire-time
+
+
         }
         else
         {
             responsefound = getResponse();
-            cache[bufstr] = responsefound;
+
+            // Check if 200
+            if (responsefound.getCode() == "200")
+                cache[bufstr] = responsefound;
         }
 
         if (DEVELOPMENT > 1)
@@ -403,24 +416,7 @@ class HTTPRequest : public HTTP
 
     void doPOST(int client_fd)
     {
-        HTTPResponse responsefound;
-
-        // Check cache & send request
-        std::string bufstr = getBuffer().data();
-        if (cache.find(bufstr) != cache.end())
-        {
-            responsefound = cache[bufstr];
-        }
-        else
-        {
-            responsefound = getResponse();
-            cache[bufstr] = responsefound;
-        }
-
-        if (DEVELOPMENT)
-            std::cout << "Content sent back is: " << std::endl
-                      << responsefound.getBuffer().data() << std::endl;
-
+        HTTPResponse responsefound = getResponse();
         // Send back
         int ret = send(client_fd, &responsefound.getBuffer().data()[0], responsefound.getBuffer().size(), 0);
     }
