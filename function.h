@@ -82,6 +82,10 @@ std::vector<char> handleChunked(int myfd, std::vector<char> firstbuff) {
     std::vector<char> tempseg(CHUNKSIZE);
     std::vector<char> tempchunk;
 
+    firstbuff.push_back('\0');
+    if (DEVELOPMENT) std::cout<<"Response buffer: "<<firstbuff.data()<<std::endl<<std::endl;
+    firstbuff.pop_back();
+
     // firstbuff doesn't contain '\0'
     while (1) {
         int recvsize = recv(myfd, &tempseg.data()[0], CHUNKSIZE, 0);
@@ -96,9 +100,13 @@ std::vector<char> handleChunked(int myfd, std::vector<char> firstbuff) {
 
         tempchunk.push_back('\0');
 
+        std::cout<<"Temp chunk size: "<<tempchunk.size()<<std::endl;
+        std::cout<<"Temp chunk content: "<<tempchunk.data()<<std::endl;
+
         // handle chunk
         std::string chunkstr = tempchunk.data();
         size_t linebreak = chunkstr.find("\r\n");
+        std::cout<<"Linebreak: "<<linebreak<<std::endl;
         int chunk_length = std::stoi(chunkstr.substr(0, linebreak), nullptr, 16);
         
         length += chunk_length;
