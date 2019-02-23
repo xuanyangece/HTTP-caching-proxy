@@ -266,6 +266,9 @@ class HTTPRequest : public HTTP
   private:
     std::string method;
     std::string url;
+    std::string port;
+    std::string hostaddr;
+    std::string IP;
 
   public:
     HTTPRequest() {}
@@ -330,6 +333,38 @@ class HTTPRequest : public HTTP
 
         // Parse header & get body
         body = readHeader(temp);
+
+        // Get port
+        std::string host = header["Host"];
+
+        // Keep track of last ':' appears
+        int count = 0;
+        int last = -1;
+        for (size_t i = 0; i < host.size(); i++) {
+            if (host[i] == ':') {
+                count++;
+                last = i;
+            }
+        }
+
+        // Update port
+        // Kind 1: "abc.com"
+        if (host.find("://") == std::string::npos && count == 0) {
+            port = "80";
+            hostaddr = host;
+        } else if (host.find("://") == std::string::npos && count > 0) {  // Kind 2: "abc.com:8000"
+            port = host.substr(last + 1);
+            hostaddr = host.substr(0, last);
+        } else if (host.find("://") != std::string::npos && count == 1)  {// Kind 3: "http://abc.com"
+            port = "80";
+            hostaddr = host;
+        } else if (host.find("://") != std::string::npos && count > 1) {  // Kind 4: "http://abc.com:8000"
+            port = host.substr(last + 1);
+            hostaddr = host.substr(0, last);
+        }
+
+        // Update IP
+
     }
 
     virtual void readStartLine(std::string line)
@@ -572,23 +607,22 @@ class HTTPRequest : public HTTP
     {
         // Get hostname
         std::unordered_map<std::string, std::string> reqheader = getheader();
-        std::string host = reqheader["Host"];
 
         if (DEVELOPMENT)
-            std::cout << "Host is: " << host << std::endl;
+            std::cout << "Host is: " << hostaddr << std::endl;
 
         int status;
         int web_fd;
         struct addrinfo host_info;
         struct addrinfo *host_info_list;
-        const char *hostname = host.c_str();
-        const char *port = "80";
+        const char *hostname = hostaddr.c_str();
+        const char *portnum = port.c_str();
 
         memset(&host_info, 0, sizeof(host_info));
         host_info.ai_family = AF_INET;
         host_info.ai_socktype = SOCK_STREAM;
 
-        status = getaddrinfo(hostname, port, &host_info, &host_info_list);
+        status = getaddrinfo(hostname, portnum, &host_info, &host_info_list);
         if (status != 0)
         {
             std::cerr << "Error: cannot get address info for host" << std::endl;
@@ -604,7 +638,7 @@ class HTTPRequest : public HTTP
         }
 
         if (DEVELOPMENT > 2)
-            std::cout << "Connecting to " << hostname << " on port " << port << "..." << std::endl;
+            std::cout << "Connecting to " << hostname << " on port " << portnum << "..." << std::endl;
 
         status = connect(web_fd, host_info_list->ai_addr, host_info_list->ai_addrlen);
         if (status == -1)
