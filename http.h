@@ -254,7 +254,8 @@ class HTTPResponse : public HTTP
         reason = line;
     }
 
-    std::string getCode() {
+    std::string getCode()
+    {
         return code;
     }
 };
@@ -340,8 +341,10 @@ class HTTPRequest : public HTTP
         // Keep track of last ':' appears
         int count = 0;
         int last = -1;
-        for (size_t i = 0; i < host.size(); i++) {
-            if (host[i] == ':') {
+        for (size_t i = 0; i < host.size(); i++)
+        {
+            if (host[i] == ':')
+            {
                 count++;
                 last = i;
             }
@@ -349,22 +352,28 @@ class HTTPRequest : public HTTP
 
         // Update port
         // Kind 1: "abc.com"
-        if (host.find("://") == std::string::npos && count == 0) {
+        if (host.find("://") == std::string::npos && count == 0)
+        {
             port = "80";
             hostaddr = host;
-        } else if (host.find("://") == std::string::npos && count > 0) {  // Kind 2: "abc.com:8000"
+        }
+        else if (host.find("://") == std::string::npos && count > 0)
+        { // Kind 2: "abc.com:8000"
             port = host.substr(last + 1);
             hostaddr = host.substr(0, last);
-        } else if (host.find("://") != std::string::npos && count == 1)  {// Kind 3: "http://abc.com"
+        }
+        else if (host.find("://") != std::string::npos && count == 1)
+        { // Kind 3: "http://abc.com"
             port = "80";
             hostaddr = host;
-        } else if (host.find("://") != std::string::npos && count > 1) {  // Kind 4: "http://abc.com:8000"
+        }
+        else if (host.find("://") != std::string::npos && count > 1)
+        { // Kind 4: "http://abc.com:8000"
             port = host.substr(last + 1);
             hostaddr = host.substr(0, last);
         }
 
         // Update IP
-
     }
 
     virtual void readStartLine(std::string line)
@@ -425,12 +434,10 @@ class HTTPRequest : public HTTP
         if (cache.find(bufstr) != cache.end())
         {
             responsefound = cache[bufstr];
-            
+
             // Check cache-control
 
             // Check expire-time
-
-
         }
         else
         {
@@ -458,6 +465,7 @@ class HTTPRequest : public HTTP
 
     void doCONNECT(int client_fd)
     {
+        //get hostname
         std::unordered_map<std::string, std::string> reqheader = getheader();
         std::string host = reqheader["Host"];
         size_t s;
@@ -487,7 +495,7 @@ class HTTPRequest : public HTTP
         {
             std::cerr << "Error: cannot get address info for host" << std::endl;
         }
-
+        //build socket
         web_fd = socket(host_info_list->ai_family,
                         host_info_list->ai_socktype,
                         host_info_list->ai_protocol);
@@ -498,6 +506,7 @@ class HTTPRequest : public HTTP
 
         if (DEVELOPMENT == 0)
             std::cout << "Connecting to " << hostname << "on port" << port << "..." << std::endl;
+        //connect host
         status = connect(web_fd, host_info_list->ai_addr, host_info_list->ai_addrlen);
         if (status == -1)
         {
@@ -508,19 +517,21 @@ class HTTPRequest : public HTTP
             std::cout << "Connected to web successfully" << std::endl;
         if (DEVELOPMENT == 0)
             std::cout << "need to handle https" << std::endl;
+        //send 200 OK info back to browser
         std::string sendOK("HTTP/1.1 200 OK\r\n\r\n");
         int sendConnect = send(client_fd, sendOK.c_str(), strlen(sendOK.c_str()), 0);
         if (sendConnect < 0)
         {
             std::cerr << "Error: connection fail" << std::endl;
         }
-        std::cout << "check send ok" << sendConnect << std::endl;
+        //std::cout << "check send ok" << sendConnect << std::endl;
         if (DEVELOPMENT == 0)
         {
             std::cout << "start to handle https" << std::endl;
             std::cout << "web_fd&resfd: " << web_fd << std::endl;
             std::cout << "client_fd: " << client_fd << std::endl;
         }
+        //start select
         fd_set fds;
         while (1)
         {
@@ -539,18 +550,18 @@ class HTTPRequest : public HTTP
             if (DEVELOPMENT)
                 std::cout << "start select succesfully" << std::endl
                           << "select:" << checkselect << std::endl;
-
+            //if the web send a message, receive and send back to browser
             if (FD_ISSET(web_fd, &fds))
             {
-                if (DEVELOPMENT)
+                if (DEVELOPMENT > 1)
                     std::cout << "receive from the web" << std::endl;
                 std::vector<char> recv_data(40960);
                 std::fill(recv_data.begin(), recv_data.end(), '\0');
                 int recvsize = recv(web_fd, &recv_data.data()[0], 40696, 0);
                 //rec_mess.push_back('\0');
-                std::cout << "receive from the web successfully" << std::endl;
-                std::cout << "check recv size:" << recvsize << std::endl;
-                std::cout << "check recv size:" << recvsize << std::endl;
+                //std::cout << "receive from the web successfully" << std::endl;
+                //std::cout << "check recv size:" << recvsize << std::endl;
+                //std::cout << "check recv size:" << recvsize << std::endl;
                 if (recvsize < 0)
                 {
                     std::cerr << "Error: fail to receive from web" << std::endl;
@@ -561,15 +572,16 @@ class HTTPRequest : public HTTP
                     return;
                 }
                 recv_data.push_back('\0');
-                std::cout << "trying to sent to the client" << std::endl;
+                //std::cout << "trying to sent to the client" << std::endl;
                 int checksend = send(client_fd, recv_data.data(), recvsize, MSG_NOSIGNAL);
-                std::cout << "checksend: " << checksend << std::endl;
+                //std::cout << "checksend: " << checksend << std::endl;
                 if (checksend < 0)
                 {
                     //close(client_fd);
                     std::cerr << "cannot send message to web" << web_fd << std::endl;
                 }
             }
+            //if the browser send a message, receive and send back to web
             else if (FD_ISSET(client_fd, &fds))
             {
                 if (DEVELOPMENT)
