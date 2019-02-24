@@ -10,6 +10,7 @@
 #include <vector>
 #include <sys/select.h>
 #include <unistd.h>
+#include <time.h>
 
 #define DEVELOPMENT 1
 
@@ -17,6 +18,10 @@
 #define TEMPSIZE 256
 
 std::vector<char> myrecv(int myfd);
+std::string readAge(std::string control);
+std::string getNow();
+bool isExpire(std::string now, std::string date, std::string seconds);
+bool isExpire(std::string now, std::string date);
 
 class HTTP
 {
@@ -429,31 +434,180 @@ class HTTPRequest : public HTTP
     {
         HTTPResponse responsefound;
 
-        // Check cache & send request
-        std::string bufstr = getBuffer().data();
-        if (cache.find(bufstr) != cache.end())
+        // Has "Cache-Control" in req header
+        if (header.find("Cache-Control") != header.end())
         {
-            responsefound = cache[bufstr];
+            std::string msg = header["Cache-Control"];
+            // Option 1: "no-store", get response directly from server
+            if (msg.find("no-store") != std::string::npos)
+            {
+                responsefound = getResponse();
+                int ret = send(client_fd, &responsefound.getBuffer().data()[0], responsefound.getBuffer().size(), 0);
+                return;
+            }
 
-            // Check cache-control
+            // Option 2: "no-cache", validate before use the cache
+            if (msg.find("no-cache") != std::string::npos)
+            {
 
-            // Check expire-time
+                // Check if has response in cache
+                if (cache.find(startline) == cache.end())
+                { // no response stored
+                    responsefound = getResponse();
+                }
+                else
+                { // has response, validate
+                    responsefound = validation();
+                }
+
+                // if 200, store it in cache
+                if (responsefound.getCode() == "200")
+                    cache[startline] = responsefound;
+
+                int ret = send(client_fd, &responsefound.getBuffer().data()[0], responsefound.getBuffer().size(), 0);
+                return;
+            }
+
+            // Option 3: "max-age" to check maximum seconds
+            if (msg.find("max-age") != std::string::npos)
+            {
+                std::string max_seconds = readAge(msg);
+
+                // Check if has response in cache
+                if (cache.find(startline) == cache.end())
+                { // no response stored
+                    responsefound = getResponse();
+                }
+                else {
+                    HTTPResponse unchecked_res = cache[startline];
+                    std::unordered_map<std::string, std::string> unchecked_header = unchecked_res.accessHeader();
+
+                    // check if res has "Cache-Control" && "max-age"
+                    if (unchecked_header.find("Cache-Control") != unchecked_header.end() && unchecked_header["Cache-Control"].find("max-age") != std::string::npos) {
+                        std::string real_seconds = readAge(unchecked_header["Cache-Control"]);
+
+                        int max = std::stoi(max_seconds);
+                        int real = std::stoi(real_seconds);
+
+                        if (real > max) {
+                            responsefound = getResponse();
+
+                            // if 200, store it in cache
+                            if (responsefound.getCode() == "200")
+                                cache[startline] = responsefound;
+
+                            int ret = send(client_fd, &responsefound.getBuffer().data()[0], responsefound.getBuffer().size(), 0);
+                            return;
+                        }
+                    }
+                }
+            }
         }
+
+        /* 
+            No "Cache-Control" in req header 
+        */
+
+        // Check if cache has response
+        if (cache.find(startline) != cache.end())
+        {
+            // get response
+            HTTPResponse unchecked_res = cache[startline];
+            std::unordered_map<std::string, std::string> unchecked_header = unchecked_res.accessHeader();
+
+            // check if res has "Cache-Control" && "max-age"
+            if (unchecked_header.find("Cache-Control") != unchecked_header.end() && unchecked_header["Cache-Control"].find("max-age") != std::string::npos)
+            {
+                std::string res_control = unchecked_header["Cache-Control"];
+
+                // Get time in response
+                std::string seconds = readAge(res_control);
+                std::string date = unchecked_header["date"];
+
+                // Get time now
+                std::string now = getNow();
+
+                bool expired = isExpire(now, date, seconds);
+
+                if (expired)
+                { // validate
+                    responsefound = validation();
+
+                    // if 200, store it in cache
+                    if (responsefound.getCode() == "200")
+                        cache[startline] = responsefound;
+                }
+                else
+                { // access
+                    responsefound = cache[startline];
+                }
+
+                int ret = send(client_fd, &responsefound.getBuffer().data()[0], responsefound.getBuffer().size(), 0);
+                return;
+            }
+
+            // check if has "Expires"
+            else if (unchecked_header.find("Expires") != unchecked_header.end())
+            {
+                std::string expires = unchecked_header["Expires"];
+
+                // expires format
+                if (expires == "0" || expires == "-1")
+                {
+                    // expires, get new one
+                    responsefound = getResponse();
+
+                    // if 200, store it in cache
+                    if (responsefound.getCode() == "200")
+                        cache[startline] = responsefound;
+                }
+                // expires is in specific time format
+                else
+                {
+                    if (isExpire(getNow(), expires))
+                    {
+                        // expires, get new one
+                        responsefound = getResponse();
+
+                        // if 200, store it in cache
+                        if (responsefound.getCode() == "200")
+                            cache[startline] = responsefound;
+                    }
+                    else
+                    {
+                        // access
+                        responsefound = cache[startline];
+                    }
+                }
+                int ret = send(client_fd, &responsefound.getBuffer().data()[0], responsefound.getBuffer().size(), 0);
+                return;
+            }
+
+            // No cache-control, no expires, then check validation
+            else
+            {
+                responsefound = validation();
+
+                // if 200, store it in cache
+                if (responsefound.getCode() == "200")
+                    cache[startline] = responsefound;
+
+                int ret = send(client_fd, &responsefound.getBuffer().data()[0], responsefound.getBuffer().size(), 0);
+                return;
+            }
+        }
+        // No response, get a new one
         else
         {
             responsefound = getResponse();
 
-            // Check if 200
+            // if 200, store it in cache
             if (responsefound.getCode() == "200")
-                cache[bufstr] = responsefound;
+                cache[startline] = responsefound;
+
+            int ret = send(client_fd, &responsefound.getBuffer().data()[0], responsefound.getBuffer().size(), 0);
+            return;
         }
-
-        if (DEVELOPMENT > 1)
-            std::cout << "Content sent back is: " << std::endl
-                      << responsefound.getBuffer().data() << std::endl;
-
-        // Send back
-        int ret = send(client_fd, &responsefound.getBuffer().data()[0], responsefound.getBuffer().size(), 0);
     }
 
     void doPOST(int client_fd)
@@ -680,6 +834,11 @@ class HTTPRequest : public HTTP
         close(web_fd);
 
         return ans;
+    }
+
+    HTTPResponse validation()
+    {
+        return cache[startline];
     }
 };
 

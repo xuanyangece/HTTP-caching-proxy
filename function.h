@@ -168,3 +168,37 @@ void handlehttp(int reqfd)
 
     close(reqfd);
 }
+
+std::string readAge(std::string control) {
+    std::string ans;
+
+    // find the position that number starts
+    size_t age = control.find("max-age=");
+    age += 8;
+
+    while (control[age] >= '0' && control[age] <= '9') {
+        ans += control[age];
+    }
+
+    if (DEVELOPMENT) std::cout<<"Age is "<<ans<<" seconds.\n"<<std::endl;
+    return ans;
+}
+
+std::string getNow() {
+    char buf[1000];
+    time_t now = time(0);
+    struct tm tm = *gmtime(&now);
+    strftime(buf, sizeof buf, "%a, %d %b %Y %H:%M:%S %Z", &tm);
+    printf("Time is: [%s]\n", buf);
+
+    std::string ans(buf);
+    return ans;
+}
+
+bool isExpire(std::string now, std::string date, std::string seconds) {
+    return true;
+}
+
+bool isExpire(std::string now, std::string date) {
+    return true;
+}
