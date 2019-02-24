@@ -1,17 +1,27 @@
 #include <sys/select.h>
 #include <unistd.h>
-#include <netdb.h> // gethostbyname
+#include <netdb.h> 
 #include <netinet/in.h>
 #include <mutex>
 #include <thread>
+
 #include "function.h"
 
-#define DEVELOPMENT 1
+#define DEVELOPMENT 1 // Development or production
+#define LOG "/var/log/erss/proxy.log" // Name and path of the log
+
+int HTTPRequest::amount = 0;
 
 std::mutex mymutex;
 
 int main(int argc, char **argv)
 {
+    // clear log
+    std::ofstream log;
+    // clear log on every run
+    log.open(LOG);
+    log.close();
+
     // Create socket
     int status;
     int sockfd;

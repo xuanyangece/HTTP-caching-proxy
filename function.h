@@ -1,6 +1,9 @@
 #include "http.h"
+#include <cstdlib>
+#include <iomanip>
 
 #define CHUNKSIZE 4096
+#define LOG "/var/log/erss/proxy.log" // Name and path of the log
 
 std::vector<char> handleChunked(int myfd, std::vector<char> firstbuff);
 
@@ -151,6 +154,8 @@ std::vector<char> handleChunked(int myfd, std::vector<char> firstbuff) {
 
 void handlehttp(int reqfd)
 {
+    std::ofstream log(LOG, std::ios::app);
+
     // MyLock lk(&mymutex);
 
     // Get request
@@ -195,10 +200,137 @@ std::string getNow() {
     return ans;
 }
 
+
+int convert_week(std::string weekday){
+    std::vector<std::string> week_to_int;
+    week_to_int.push_back("Sun");
+    week_to_int.push_back("Mon");
+    week_to_int.push_back("Tue");
+    week_to_int.push_back("Wed");
+    week_to_int.push_back("Thu");
+    week_to_int.push_back("Fri");
+    week_to_int.push_back("Sat");
+    
+    for(int i=0;i<week_to_int.size();i++){
+        if(week_to_int[i].compare(weekday)==0){
+            return i;
+        }
+    }
+    return 7;
+}
+
+int convert_month(std::string month){
+    std::vector<std::string> month_to_int;
+    month_to_int.push_back("Jan");
+    month_to_int.push_back("Feb");
+    month_to_int.push_back("Mar");
+    month_to_int.push_back("Apr");
+    month_to_int.push_back("May");
+    month_to_int.push_back("Jun");
+    month_to_int.push_back("Jul");
+    month_to_int.push_back("Aug");
+    month_to_int.push_back("Sep");
+    month_to_int.push_back("Oct");
+    month_to_int.push_back("Nov");
+    month_to_int.push_back("Dec");
+    for(int i=0;i<month_to_int.size();i++){
+        if(month_to_int[i].compare(month)==0){
+            return i;
+        }
+    }
+    return 12;
+}
+
+time_t convert_GMT(std::string s){
+  //initiate to have right format
+  time_t rawtime;
+  time(&rawtime);
+  struct tm *tm1 = localtime(&rawtime);
+  std::string week,date,month, year,current_time;
+  //parse the input string
+  //get week 
+  size_t pos = s.find(", ");
+  if (pos != std::string::npos){
+    week = s.substr(0, pos);
+  }
+  s.erase(0, pos + 2);
+
+  //get date
+   pos = s.find(" ");
+   if (pos != std::string::npos){
+        date= s.substr(0, pos);
+   }
+   s.erase(0, pos + 1);
+
+   //get month
+   pos = s.find(" ");
+   if (pos != std::string::npos){
+        month = s.substr(0, pos);
+   }
+    s.erase(0, pos + 1);
+
+    //get year
+   pos = s.find(" ");
+   if (pos != std::string::npos){
+        year = s.substr(0, pos);
+   }
+    s.erase(0, pos + 1);
+
+    //get current time 
+    pos = s.find(" ");
+   if (pos != std::string::npos){
+        current_time = s.substr(0, pos);
+   }
+    s.erase(0, pos + 1);
+    int weekint = convert_week(week);
+    if(weekint == 7){
+        std::cerr << "wrong format of week" <<std::endl;
+    }
+    int dateint = atoi(date.c_str());
+    int monthint = convert_month(month);
+    if(monthint == 12){
+        std::cerr << "wrong format of month" <<std::endl;
+    }
+    int yearint = atoi(year.c_str())-1900;
+    
+    //parse time format
+    std::string temp;
+    pos = current_time.find(":");
+   if (pos != std::string::npos){
+        temp = current_time.substr(0, pos);
+        tm1->tm_hour = atoi(temp.c_str());
+   }
+   current_time.erase(0, pos + 1);
+   
+   pos = current_time.find(":");
+   if (pos != std::string::npos){
+        temp = current_time.substr(0, pos);
+        tm1->tm_min = atoi(temp.c_str());
+   }
+   current_time.erase(0, pos + 1);
+
+   //store the info
+   tm1->tm_sec = atoi(current_time.c_str());
+   tm1->tm_wday = weekint;
+   tm1->tm_mday = dateint;
+   tm1->tm_isdst = 0;
+   time_t timeData = mktime(tm1);
+   return timeData;
+}
+
 bool isExpire(std::string now, std::string date, std::string seconds) {
-    return true;
+  time_t now_time = convert_GMT(now);
+  time_t date_time = convert_GMT(date);
+  if(difftime(now_time, date_time)>(double)atoi(seconds.c_str())){
+    return true;}
+  return false;
 }
 
 bool isExpire(std::string now, std::string date) {
-    return true;
+  time_t now_time = convert_GMT(now);
+  time_t date_time = convert_GMT(date);
+  if(difftime(now_time, date_time)>0){
+    return true;}
+  return false;
+
 }
