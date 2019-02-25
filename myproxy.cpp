@@ -12,8 +12,6 @@
 
 int HTTPRequest::amount = 0;
 
-std::mutex mymutex;
-
 int main(int argc, char **argv)
 {
     // clear log
