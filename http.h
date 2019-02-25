@@ -112,38 +112,6 @@ class HTTP
     std::string getStartLine() {
         return startline;
     }
-};
-
-class HTTPResponse : public HTTP
-{
-  private:
-    std::string code;
-    std::string reason;
-
-  public:
-    HTTPResponse() {}
-
-    HTTPResponse(std::vector<char> temp)
-    {
-        buffer = temp;
-        parseBuffer();
-    }
-
-    HTTPResponse(const HTTPResponse &rhs)
-    {
-        buffer = rhs.buffer;
-        parseBuffer();
-    }
-
-    HTTPResponse &operator=(const HTTPResponse &rhs)
-    {
-        if (this != &rhs)
-        {
-            buffer = rhs.buffer;
-            parseBuffer();
-        }
-        return *this;
-    }
 
     void reParse()
     {
@@ -196,6 +164,39 @@ class HTTPResponse : public HTTP
 
         buffer = temp;
     }
+};
+
+class HTTPResponse : public HTTP
+{
+  private:
+    std::string code;
+    std::string reason;
+
+  public: 
+    HTTPResponse() {}
+
+    HTTPResponse(std::vector<char> temp)
+    {
+        buffer = temp;
+        parseBuffer();
+    }
+
+    HTTPResponse(const HTTPResponse &rhs)
+    {
+        buffer = rhs.buffer;
+        parseBuffer();
+    }
+
+    HTTPResponse &operator=(const HTTPResponse &rhs)
+    {
+        if (this != &rhs)
+        {
+            buffer = rhs.buffer;
+            parseBuffer();
+        }
+        return *this;
+    }
+
 
     virtual void parseBuffer()
     {
@@ -273,6 +274,8 @@ class HTTPResponse : public HTTP
 };
 
 std::unordered_map<std::string, HTTPResponse> cache;
+bool checkResponse(HTTPResponse response);
+bool checkExpire(HTTPResponse response);
 
 class HTTPRequest : public HTTP
 {
@@ -476,26 +479,64 @@ class HTTPRequest : public HTTP
     }
 
     void doGET(int client_fd) {
-        HTTPResponse responsefound;
-
-        if (cache.find(startline) == cache.end())
-        { // no response stored
-            log<<ID<<": not in cache"<<std::endl;
-            responsefound = getResponse();
-        }
-        else
-        { // has response
-            log<<ID<<": in cache, don't know if valid"<<std::endl;
-            responsefound = cache[startline];
+      HTTPResponse responsefound;
+      
+      if (cache.find(startline) != cache.end())
+        { // response stored
+	  
+	  bool checkE = checkExpire(cache[startline]);
+	  responsefound = cache[startline];
+	  std::unordered_map<std::string, std::string> response_header = responsefound.getheader();
+	  //if has expired, need to revalidate, modify the previous request buffer
+          
+	  if(checkE == true){
+	    if(response_header.find("Etag")==response_header.end()||response_header.find("Last-Modified")==response_header.end()){
+	      responsefound = getResponse();
+	      bool mycheck = checkResponse(responsefound);
+	      if(mycheck == true){
+		cache[startline] = responsefound;
+	      }
+	      int ret = send(client_fd, &responsefound.getBuffer().data()[0], responsefound.getBuffer().size(), 0);
+	      return;
+	    }
+	    header["If-None-Match"] = response_header["Etag"];
+	    header["If-Modified-Since"] = response_header["Last-Modified"];
+	    reParse();
+	    getBuffer();
+	    //send the modified buffer to get a new response and check if validate
+	    responsefound = getResponse();
+	    std::string newCode =  responsefound.getCode();
+	    //if is validate, reture the response in cache 
+	    if(newCode.compare("304")==0){
+	      responsefound = cache[startline];
+	      int ret = send(client_fd, &responsefound.getBuffer().data()[0], responsefound.getBuffer().size(), 0);
+	      return;
+	    }
+	    //if not validate, return the new 200 ok response and update the cache
+	    if(newCode.compare("200")==0){
+	      cache[startline] = responsefound;
+	      int ret = send(client_fd, &responsefound.getBuffer().data()[0], responsefound.getBuffer().size(), 0);
+	      return;
+	    }
             
+	  }
+	  //if is not expired, return it
+	  else{
+	    responsefound = cache[startline];
+	    int ret = send(client_fd, &responsefound.getBuffer().data()[0], responsefound.getBuffer().size(), 0);
+	    return;
+	  }
+          
         }
+      else{//need to check if could store in cache
+	responsefound = getResponse();
+	bool mycheck = checkResponse(responsefound);
+	if(mycheck == true){
+	  cache[startline] = responsefound;
+	}
+	int ret = send(client_fd, &responsefound.getBuffer().data()[0], responsefound.getBuffer().size(), 0);
+      }
 
-        // if 200, store it in cache
-        if (responsefound.getCode() == "200")
-            cache[startline] = responsefound;
-
-        int ret = send(client_fd, &responsefound.getBuffer().data()[0], responsefound.getBuffer().size(), 0);
-        return;
     }
 
     void doPOST(int client_fd)
@@ -504,7 +545,7 @@ class HTTPRequest : public HTTP
         // Send back
         int ret = send(client_fd, &responsefound.getBuffer().data()[0], responsefound.getBuffer().size(), 0);
     }
-
+    
     void doCONNECT(int client_fd)
     {
         //get hostname

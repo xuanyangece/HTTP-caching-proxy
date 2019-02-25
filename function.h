@@ -7,6 +7,46 @@
 
 std::vector<char> handleChunked(int myfd, std::vector<char> firstbuff);
 
+//return true: can cache
+bool checkResponse(HTTPResponse response){
+  std::unordered_map<std::string, std::string> header = response.getheader();
+  if (header.find("Cache-Control")!=header.end())
+    {
+      std::string cache_control = header["Cache-Control"];
+      //Check the cache-control field: no-store and private
+      if(cache_control.find("no-store")!=std::string::npos||cache_control.find("private")!=std::string::npos){
+	return false;
+      }
+    }
+  return true;
+}
+
+bool checkExpire(HTTPResponse response){
+  std::unordered_map<std::string, std::string> header = response.getheader();
+  if (header.find("Cache-Control")!=header.end()){
+    std::string cache_control = header["Cache-Control"];
+    //Check the cache-control field: if max-age exists, use it to check expire
+    if(cache_control.find("max-age")!=std::string::npos && header.find("Date")!= header.end()){
+      std::string max_age = readAge(cache_control);
+      std::string now_time = getNow();
+      std::string date = header["Date"];
+      bool ifExpire = isExpire(now_time,date,max_age);
+      return ifExpire;
+    }
+    
+  }
+  
+  //if expire exists, use it to check, it is used to validate
+  if(header.find("Expires")!=header.end()){
+    std::string now_time = getNow();
+    std::string expiretime = header["Expires"];
+    bool ifExpire = isExpire(now_time,expiretime);
+    return ifExpire;
+  }
+  return true;
+}
+
+
 std::vector<char> myrecv(int myfd)
 {
     std::vector<char> tempbuf;
@@ -63,8 +103,8 @@ std::vector<char> myrecv(int myfd)
             }
             else
             {
-                std::cout << "OK, print whole temp buffer: " << std::endl;
-                std::cout << tempbuf.data() << std::endl;
+	      //                std::cout << "OK, print whole temp buffer: " << std::endl;
+	      // std::cout << tempbuf.data() << std::endl;
             }
         }
 
