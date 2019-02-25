@@ -8,15 +8,14 @@
 std::vector<char> handleChunked(int myfd, std::vector<char> firstbuff);
 
 std::string computeExpire(std::string checkDate, std::string age_tmp){
-//   time_t date = convert_GMT(checkDate);
-//   time_t seconds = (time_t)atoi(age_tmp.c_str());
-//   time_t expireTmp = date+seconds;
-//   char buf[1000];
-//   struct tm tm_expire = *gmtime(&expireTmp);
-//   strftime(buf, sizeof buf, "%a, %d %b %Y %H:%M:%S %Z", &tm_expire);
-//   std::string ans(buf);
-//   return ans; 
-return "EXAMPLE";
+  time_t date = convert_GMT(checkDate);
+  time_t seconds = (time_t)atoi(age_tmp.c_str());
+  time_t expireTmp = date+seconds;
+  char buf[1000];
+  struct tm tm_expire = *gmtime(&expireTmp);
+  strftime(buf, sizeof buf, "%a, %d %b %Y %H:%M:%S %Z", &tm_expire);
+  std::string ans(buf);
+  return ans; 
 }
 
 /*
