@@ -6,13 +6,120 @@
 #define FUNCDEVELOPMENT 1
 
 // 1 - checkExpire
+// 2 - handleChunk
 #define CHECKMINOR 0
 
 #define LOG "/var/log/erss/proxy.log" // Name and path of the log
 
-
-
 time_t convert_GMT(std::string s);
+
+/*
+    Check if has chunk, input doesn't have terminator.
+*/
+bool checkChunk(std::vector<char> tempbuf) {
+    tempbuf.push_back('\0');
+    std::string ss(tempbuf.data());
+
+    // Search from "Transfer-Encoding"
+    if (ss.find("Transfer-Encoding") != std::string::npos) {
+        size_t start = ss.find("Transfer-Encoding");
+
+        if(ss.find("chunked", start) != std::string::npos){
+            return true;
+        }
+    }
+
+    return false;
+}
+
+/*
+    Check chunk end, input doesn't have terminator.
+*/
+size_t checkEnd(std::vector<char> tempbuf){
+    tempbuf.push_back('\0');
+	std::string ss(tempbuf.data());
+
+	if(ss.find("0\r\n\r\n")!=std::string::npos)
+	{	size_t pos = ss.find("0\r\n\r\n");
+
+        if (CHECKMINOR == 2) std::cout<<"\nPOS: "<<pos<<std::endl<<std::endl;
+		//end of chunk, return position of '\0'
+		return pos + 5;	
+	}
+
+	return 0;
+}
+
+/*
+    Handle chunk.
+    Return whole buffer.
+*/
+std::vector<char> handleChunk(int myfd,std::vector<char> buff){
+	std::vector<char> ans;
+	std::vector<char> temp(TEMPSIZE);
+
+	size_t checkE = checkEnd(buff);
+
+	if(checkE == 0){
+        // not received last chunk
+		ans = buff;
+	}
+	else{
+        // received last chunk
+		for(size_t i = 0; i < checkE; i++){
+			ans.push_back(buff[i]);
+		}
+        ans.push_back('\0');
+
+        return ans;
+	}
+
+    if (CHECKMINOR == 2) std::cout<<"Not received whole chunk\n";
+
+    // Not received last chunk yet
+	while(1){
+        if (CHECKMINOR == 2) std::cout<<"Continue receiving...\n";
+		int segsize = recv(myfd, &temp.data()[0], TEMPSIZE, 0);
+        
+        if (CHECKMINOR == 2) {
+            std::string myboy(temp.data());
+            std::cout<<"Received: \n\""<<myboy<<"\"\n\n";
+        }
+
+
+		if (segsize < 0){
+            std::cout << "Error in receive request" << std::endl;
+            throw "Error receiving in handle chunk";
+        }
+
+        checkE = checkEnd(temp);
+
+        if(checkE == 0){
+            // Not finished yet
+        	for (int i = 0; i < segsize; i++){
+                ans.push_back(temp[i]);
+        	}
+        }
+        else{
+        	for(int i = 0; i < checkE; i++){
+			    ans.push_back(temp[i]);
+			}
+            ans.push_back('\0');
+
+			return ans;
+        }
+
+        /* WHEN EMPTY */
+        if (segsize == 0) {
+            ans.push_back('\0');
+
+            return ans;
+        }
+
+        // ASSUME RIGHT
+        std::fill(temp.begin(), temp.end(), '\0');
+	}
+}
 
 /*
     Compute expire time
@@ -163,9 +270,28 @@ std::vector<char> myrecv(int myfd)
         if (segsize < TEMPSIZE)
         { 
             if (FUNCDEVELOPMENT == 1) std::cout<<"Enter if\n";
-            
+
+            /*
+                CHECK CHUNK HERE
+            */
+            if (checkChunk(tempbuf)) {
+                if (FUNCDEVELOPMENT == 1) {
+                    std::cout<<"\nHELLO CHUNK!!!\n\n";
+                    tempbuf.push_back('\0');
+                    std::cout<<"TEMP BUFF: \n\""<<tempbuf.data()<<"\""<<std::endl<<std::endl;
+                    tempbuf.pop_back();
+                }
+
+                return handleChunk(myfd, tempbuf);
+            } 
+
+
+            /*
+                IF NOT CHUNK, OK THEN
+            */
             // Finish receive
             tempbuf.push_back('\0');
+
             HTTPResponse tempres(tempbuf);
             std::unordered_map<std::string, std::string> tempheader = tempres.getheader();
 
@@ -226,7 +352,9 @@ void handlehttp(int reqfd)
     }
 }
 
-
+/*
+    Read max-age from "Cache-Control"
+*/
 std::string readAge(std::string control)
 {
     std::string ans;
@@ -246,6 +374,9 @@ std::string readAge(std::string control)
     return ans;
 }
 
+/*
+    Get string format of present time.
+*/
 std::string getNow()
 {
     char buf[1000];
@@ -258,6 +389,9 @@ std::string getNow()
     return ans;
 }
 
+/*
+    Helper time comparasion function.
+*/
 int convert_week(std::string weekday)
 {
     std::vector<std::string> week_to_int;
@@ -279,6 +413,9 @@ int convert_week(std::string weekday)
     return 7;
 }
 
+/*
+    Helper time comparasion function.
+*/
 int convert_month(std::string month)
 {
     std::vector<std::string> month_to_int;
@@ -304,6 +441,9 @@ int convert_month(std::string month)
     return 12;
 }
 
+/*
+    Helper time comparasion function.
+*/
 time_t convert_GMT(std::string s)
 {
     //initiate to have right format
@@ -391,6 +531,9 @@ time_t convert_GMT(std::string s)
     return timeData;
 }
 
+/*
+    Check if date + seconds has expired.
+*/
 bool isExpire(std::string now, std::string date, std::string seconds)
 {
     time_t now_time = convert_GMT(now);
@@ -402,6 +545,9 @@ bool isExpire(std::string now, std::string date, std::string seconds)
     return false;
 }
 
+/*
+    Check if date passes now.
+*/
 bool isExpire(std::string now, std::string date)
 {
     time_t now_time = convert_GMT(now);
