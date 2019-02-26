@@ -90,6 +90,10 @@ int checkExpire(HTTPResponse response)
 
         std::string expiretime = header["Expires"];
 
+        if (expiretime == "0" || expiretime == "-1") {
+            return 0;
+        }
+
         bool ifExpire = isExpire(now_time, expiretime);
         if (ifExpire) return 3;
         else return 4;
