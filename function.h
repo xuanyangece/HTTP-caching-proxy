@@ -6,6 +6,7 @@
 #define LOG "/var/log/erss/proxy.log" // Name and path of the log
 
 std::vector<char> handleChunked(int myfd, std::vector<char> firstbuff);
+time_t convert_GMT(std::string s);
 
 std::string computeExpire(std::string checkDate, std::string age_tmp){
   time_t date = convert_GMT(checkDate);
@@ -252,6 +253,13 @@ std::vector<char> handleChunked(int myfd, std::vector<char> firstbuff)
             tempchunk.clear();
         }
     }
+}
+
+void return404(int client_fd) {
+    std::cout<<"Cannot found"<<std::endl;
+  std::string header("HTTP/1.1 404 Not Found\r\nContent-Length: 36\r\nConnection: close\r\nContent-Type: text/html\r\n\r\n<html><body>Not Found</body></html>\n");
+  int len = send(client_fd, header.c_str(),
+                 header.length(), MSG_NOSIGNAL);
 }
 
 void handlehttp(int reqfd)

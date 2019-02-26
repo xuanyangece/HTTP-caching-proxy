@@ -24,6 +24,7 @@ std::vector<char> myrecv(int myfd);
 std::string readAge(std::string control);
 std::string computeExpire(std::string checkDate, std::string age_tmp);
 std::string getNow();
+void return404(int client_fd);
 
 bool isExpire(std::string now, std::string date, std::string seconds);
 bool isExpire(std::string now, std::string date);
@@ -499,18 +500,24 @@ class HTTPRequest : public HTTP
 
     void handlereq(int client_fd)
     {
-        if (method == "GET")
-        {
-            doGET(client_fd);
+        try {
+            if (method == "GET")
+            {
+                doGET(client_fd);
+            }
+            else if (method == "POST")
+            {
+                doPOST(client_fd);
+            }
+            else if (method == "CONNECT")
+            {
+                doCONNECT(client_fd);
+            }
+        } catch (const char* msg) {
+            return404(client_fd);
+            close(client_fd);
         }
-        else if (method == "POST")
-        {
-            doPOST(client_fd);
-        }
-        else if (method == "CONNECT")
-        {
-            doCONNECT(client_fd);
-        }
+
     }
 
     void doGET(int client_fd)
@@ -776,11 +783,13 @@ class HTTPRequest : public HTTP
         std::unordered_map<std::string, std::string> reqheader = getheader();
         std::string host = reqheader["Host"];
         size_t s;
+
         if (s = host.find(":443") != std::string::npos)
         {
             s = host.find(":443");
             host = host.substr(0, s);
         }
+
         if (DEVELOPMENT == 0)
             std::cout << "Host is: " << host << std::endl;
 
@@ -791,7 +800,7 @@ class HTTPRequest : public HTTP
         const char *hostname = host.c_str();
         const char *port = "443";
         if (DEVELOPMENT == 0)
-            std::cout << "hostnameis: " << hostname << std::endl;
+            std::cout << "hostname is: " << hostname << std::endl;
 
         memset(&host_info, 0, sizeof(host_info));
         host_info.ai_family = AF_INET;
@@ -801,6 +810,7 @@ class HTTPRequest : public HTTP
         if (status != 0)
         {
             std::cerr << "Error: cannot get address info for host" << std::endl;
+            throw "404 Not Found";
         }
         //build socket
         web_fd = socket(host_info_list->ai_family,
@@ -950,6 +960,7 @@ class HTTPRequest : public HTTP
         if (status != 0)
         {
             std::cerr << "Error: cannot get address info for host" << std::endl;
+            throw "404 Not Found";
         }
 
         web_fd = socket(host_info_list->ai_family,
