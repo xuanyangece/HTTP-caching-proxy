@@ -13,8 +13,13 @@
 #include <time.h>
 #include <fstream>
 
-#define TEMPSIZE 3331
+#define TEMPSIZE 33331
+#define CONNECTSIZE 51200
 
+// 1 - parseBuffer & readHeader
+// 2 - doGET
+// 3 - doCONNECT
+// 4 - getResponse
 #define DEVELOPMENT 1
 #define LOG "/var/log/erss/proxy.log" // Name and path of the log
 
@@ -65,10 +70,14 @@ class HTTP
     virtual void readStartLine(std::string line) = 0;
     virtual ~HTTP() {}
 
+    /*
+        Read header into an unordered_map, return body as string
+    */
     std::string readHeader(std::string lines)
     {
         size_t pos;
         std::string line;
+
         while (lines.find("\r\n") != std::string::npos && lines.substr(0, lines.find("\r\n")) != "")
         {
             pos = lines.find("\r\n");
@@ -81,7 +90,7 @@ class HTTP
                 if (colon == std::string::npos)
                 {
                     std::cout << "Error in format of header" << std::endl;
-                    return "";
+                    throw "Header format exception";
                 }
                 else
                 {
@@ -89,7 +98,7 @@ class HTTP
                     std::string value = line.substr(colon + 1);
                     header[key] = value;
 
-                    if (DEVELOPMENT > 1)
+                    if (DEVELOPMENT == 1)
                         std::cout << "Key: " << key << " & Value: " << value << std::endl;
                 }
             }
@@ -99,18 +108,19 @@ class HTTP
                 std::string value = line.substr(colon + 2);
                 header[key] = value;
 
-                if (DEVELOPMENT > 1)
+                if (DEVELOPMENT == 1)
                     std::cout << "Key: " << key << " & Value: " << value << std::endl;
             }
 
             lines.erase(0, pos + 2);
         }
 
-        if (DEVELOPMENT > 1)
-            std::cout << "After read header, total " << header.size() << " headers" << std::endl;
+        if (DEVELOPMENT == 1) std::cout << "After read header, total " << header.size() << " headers" << std::endl;
+        
         lines.erase(0, 2);
-        if (DEVELOPMENT > 1)
-            std::cout << "Remain body: " << lines << std::endl;
+        
+        if (DEVELOPMENT == 1) std::cout << "Remain body: " << lines << std::endl;
+
         return lines;
     }
 
@@ -223,6 +233,7 @@ class HTTPResponse : public HTTP
         return *this;
     }
 
+
     virtual void parseBuffer()
     {
 
@@ -305,12 +316,12 @@ int checkExpire(HTTPResponse response);
 class HTTPRequest : public HTTP
 {
   private:
+    int ID;
     std::string method;
     std::string url;
     std::string port;
     std::string hostaddr;
     std::string IP;
-    int ID;
     std::ofstream log;
 
   public:
@@ -355,6 +366,9 @@ class HTTPRequest : public HTTP
         log.close();
     }
 
+    /*
+        Print initial message when get request
+    */
     void printInitialMsg()
     {
         time_t now;
@@ -374,6 +388,9 @@ class HTTPRequest : public HTTP
         log << ID << ": Received "<< "\"" << line << "\""<< " from " << hostaddr << std::endl;
     }
 
+    /*
+        Parse buffer to get info about header, body and address info
+    */
     virtual void parseBuffer()
     {
         std::string temp = buffer.data();
@@ -383,32 +400,18 @@ class HTTPRequest : public HTTP
         if (pos == std::string::npos)
         {
             std::cout << "Error parsing first line" << std::endl;
-            return;
+            // THROW INFO
+            throw "Request buffer format error";
         }
         startline = temp.substr(0, pos);
 
-        if (DEVELOPMENT)
-        {
-            std::cout << "Startline is: " << startline << std::endl;
-        }
+        if (DEVELOPMENT == 1) std::cout << "Startline is: " << startline << std::endl;
 
         readStartLine(startline);
 
-        if (DEVELOPMENT > 1)
-        {
-            std::cout << "After read startline, method is: " << method << std::endl;
-            std::cout << "And url is: " << url << std::endl;
-            std::cout << "And HTTP version is: " << HTTPversion << std::endl
-                      << std::endl;
-        }
-
         temp.erase(0, pos + 2);
 
-        if (DEVELOPMENT > 1)
-        {
-            std::cout << "Erase startline, the rest is: " << std::endl
-                      << temp << std::endl;
-        }
+        if (DEVELOPMENT == 1) std::cout << "\nErase startline, the rest is: " << std::endl << temp << std::endl<< std::endl;
 
         // Parse header & get body
         body = readHeader(temp);
@@ -454,7 +457,7 @@ class HTTPRequest : public HTTP
         // Update IP
         struct hostent *hent;
         hent = gethostbyname(hostaddr.c_str());
-        if (NULL == hent)
+        if (hent == NULL)
         {
             std::cout << "Cannot get IP" << std::endl;
             throw "404 Not Found";
@@ -467,6 +470,9 @@ class HTTPRequest : public HTTP
         IP = clientIP;
     }
 
+    /*
+        Read start line
+    */
     virtual void readStartLine(std::string line)
     {
         // Read method
@@ -474,7 +480,7 @@ class HTTPRequest : public HTTP
         if (pos == std::string::npos)
         {
             std::cout << "Error in reading method" << std::endl;
-            return;
+            throw "Error in reading method from request";
         }
 
         method = line.substr(0, pos);
@@ -485,7 +491,7 @@ class HTTPRequest : public HTTP
         if (pos == std::string::npos)
         {
             std::cout << "Error in reading url" << std::endl;
-            return;
+            throw "Error in reading url from request";
         }
 
         url = line.substr(0, pos);
@@ -496,13 +502,17 @@ class HTTPRequest : public HTTP
         if (HTTPversion != "HTTP/1.1")
         {
             std::cout << "HTTP version not normal" << std::endl;
-            return;
+            throw "Protocol not supported, only support HTTP/1.1";
         }
     }
 
+    /*
+        Just handle supported method: GET POST CONNECT
+    */
     void handlereq(int client_fd)
     {
         try {
+            // Method supported
             if (method == "GET")
             {
                 doGET(client_fd);
@@ -515,6 +525,11 @@ class HTTPRequest : public HTTP
             {
                 doCONNECT(client_fd);
             }
+            
+            // Method not supported
+            else {
+                throw "Method only support GET, POST and CONNECT";
+            }
         } catch (const char* msg) {
             return404(client_fd);
             close(client_fd);
@@ -524,18 +539,17 @@ class HTTPRequest : public HTTP
 
     void doGET(int client_fd)
     {
-        MyLock lk(&mymutex);
         HTTPResponse responsefound;
 
         if (cache.find(startline) != cache.end())  // cache has response
         { 
-            std::cout << "find in cache! " << std::endl;
+            if (DEVELOPMENT == 2) std::cout << "find in cache! " << std::endl;
 
             responsefound = cache[startline];
 
             int checkE = checkExpire(responsefound);
 
-            std::cout << "check Expire: " << checkExpire << std::endl;
+            if (DEVELOPMENT == 2) std::cout << "check Expire: " << checkExpire << std::endl;
 
             
             std::unordered_map<std::string, std::string> response_header = responsefound.getheader();
@@ -760,7 +774,9 @@ class HTTPRequest : public HTTP
         }
     }
 
-    // Check request has the specific content
+    /*
+        Check request has the specific content
+    */
     bool checkContent(std::string content) {
         if (header.find("Cache-Control") != header.end()) {
             std::string control = header["Cache-Control"];
@@ -791,8 +807,7 @@ class HTTPRequest : public HTTP
             host = host.substr(0, s);
         }
 
-        if (DEVELOPMENT == 0)
-            std::cout << "Host is: " << host << std::endl;
+        if (DEVELOPMENT == 3) std::cout << "Host is: " << host << std::endl;
 
         int status;
         int web_fd;
@@ -800,8 +815,7 @@ class HTTPRequest : public HTTP
         struct addrinfo *host_info_list;
         const char *hostname = host.c_str();
         const char *port = "443";
-        if (DEVELOPMENT == 0)
-            std::cout << "hostname is: " << hostname << std::endl;
+
 
         memset(&host_info, 0, sizeof(host_info));
         host_info.ai_family = AF_INET;
@@ -819,36 +833,38 @@ class HTTPRequest : public HTTP
                         host_info_list->ai_protocol);
         if (web_fd == -1)
         {
-            std::cerr << "Error: cannot create socket to the web" << std::endl;
+            std::cerr << "Error: cannot create socket to the server" << std::endl;
+            throw "Error creating socket to the server";
         }
 
-        if (DEVELOPMENT == 0)
-            std::cout << "Connecting to " << hostname << "on port" << port << "..." << std::endl;
+        if (DEVELOPMENT == 3) std::cout << "Connecting to " << hostname << "on port" << port << "..." << std::endl;
+        
         //connect host
         status = connect(web_fd, host_info_list->ai_addr, host_info_list->ai_addrlen);
         if (status == -1)
         {
-            std::cerr << "Error: cannot connect to socket to the web" << std::endl;
+            std::cerr << "Error: cannot connect to socket to the server" << std::endl;
+            throw "Error connecting socket to the server";
         }
 
-        if (DEVELOPMENT == 0)
-            std::cout << "Connected to web successfully" << std::endl;
-        if (DEVELOPMENT == 0)
-            std::cout << "need to handle https" << std::endl;
+        if (DEVELOPMENT == 3) std::cout << "Connected to web successfully" << std::endl;
+
         //send 200 OK info back to browser
         std::string sendOK("HTTP/1.1 200 OK\r\n\r\n");
         int sendConnect = send(client_fd, sendOK.c_str(), strlen(sendOK.c_str()), 0);
         if (sendConnect < 0)
         {
             std::cerr << "Error: connection fail" << std::endl;
+            throw "Error sending 200 OK to client";
         }
-        //std::cout << "check send ok" << sendConnect << std::endl;
-        if (DEVELOPMENT == 0)
+
+        if (DEVELOPMENT == 3) 
         {
             std::cout << "start to handle https" << std::endl;
             std::cout << "web_fd&resfd: " << web_fd << std::endl;
             std::cout << "client_fd: " << client_fd << std::endl;
         }
+
         //start select
         fd_set fds;
         while (1)
@@ -856,81 +872,86 @@ class HTTPRequest : public HTTP
             FD_ZERO(&fds);
             FD_SET(web_fd, &fds);
             FD_SET(client_fd, &fds);
-            if (DEVELOPMENT)
-                std::cout << "start to select" << std::endl;
+
+            if (DEVELOPMENT == 3) std::cout << "start to select" << std::endl;
+
             int checkselect = select(sizeof(fds) * 3, &fds, NULL, NULL, NULL);
             if (checkselect == -1)
             {
-                std::cerr << "fail select in connect" << std::endl;
-                return;
+                std::cerr << "Fail select in connect" << std::endl;
+                throw "Fail select in CONNECT";
             }
 
-            if (DEVELOPMENT)
-                std::cout << "start select succesfully" << std::endl
-                          << "select:" << checkselect << std::endl;
+            if (DEVELOPMENT == 3) std::cout << "start select succesfully" << std::endl << "select:" << checkselect << std::endl;
+            
             //if the web send a message, receive and send back to browser
             if (FD_ISSET(web_fd, &fds))
             {
-                if (DEVELOPMENT > 1)
-                    std::cout << "receive from the web" << std::endl;
-                std::vector<char> recv_data(40960);
+                if (DEVELOPMENT == 3) std::cout << "receive from the web" << std::endl;
+
+
+                std::vector<char> recv_data(CONNECTSIZE);
                 std::fill(recv_data.begin(), recv_data.end(), '\0');
-                int recvsize = recv(web_fd, &recv_data.data()[0], 40696, 0);
-                //rec_mess.push_back('\0');
-                //std::cout << "receive from the web successfully" << std::endl;
-                //std::cout << "check recv size:" << recvsize << std::endl;
-                //std::cout << "check recv size:" << recvsize << std::endl;
+                int recvsize = recv(web_fd, &recv_data.data()[0], CONNECTSIZE, 0);
+
                 if (recvsize < 0)
                 {
-                    std::cerr << "Error: fail to receive from web" << std::endl;
+                    std::cerr << "Error: fail to receive from server" << std::endl;
+                    throw "Error receiving message from server in CONNECT";
                 }
+
                 if (recvsize == 0)
                 {
-                    std::cout << "web close" << std::endl;
+                    if (DEVELOPMENT == 3) std::cout << "web close" << std::endl;
                     return;
                 }
+
                 recv_data.push_back('\0');
-                //std::cout << "trying to sent to the client" << std::endl;
+
+                if (DEVELOPMENT == 3) std::cout << "trying to sent to the client" << std::endl;
                 int checksend = send(client_fd, recv_data.data(), recvsize, MSG_NOSIGNAL);
-                //std::cout << "checksend: " << checksend << std::endl;
+                if (DEVELOPMENT == 3) std::cout << "checksend: " << checksend << std::endl;
+
                 if (checksend < 0)
                 {
-                    //close(client_fd);
-                    std::cerr << "cannot send message to web" << web_fd << std::endl;
+                    std::cerr << "cannot send message to server" << web_fd << std::endl;
+                    throw "Error sending message back to server in CONNECT";
                 }
             }
             //if the browser send a message, receive and send back to web
             else if (FD_ISSET(client_fd, &fds))
             {
-                if (DEVELOPMENT)
-                    std::cout << "receive from the browser" << std::endl;
-                // char rec_mess[40696];
-                //memset(&rec_mess,0,40696);
-                std::vector<char> recv_data(40960);
+                if (DEVELOPMENT == 3) std::cout << "receive from the browser" << std::endl;
+
+                std::vector<char> recv_data(CONNECTSIZE);
                 std::fill(recv_data.begin(), recv_data.end(), '\0');
-                int recvsize = recv(client_fd, &recv_data.data()[0], 40696, 0);
-                //rec_mess.push_back('\0');
-                std::cout << "check recv size:" << recvsize << std::endl;
+                int recvsize = recv(client_fd, &recv_data.data()[0], CONNECTSIZE, 0);
+
+                if (DEVELOPMENT == 3) std::cout << "check recv size:" << recvsize << std::endl;
                 if (recvsize < 0)
                 {
                     std::cerr << "Error: fail to receive from client" << std::endl;
+                    throw "Error receiving message from client in CONNECT";
                 }
+
                 if (recvsize == 0)
                 {
-                    std::cout << "browser close" << std::endl;
+                    if (DEVELOPMENT == 3) std::cout << "browser close" << std::endl;
                     return;
                 }
+
                 int checksend = send(web_fd, recv_data.data(), recvsize, MSG_NOSIGNAL);
-                std::cout << "checksend" << checksend << std::endl;
+                if (DEVELOPMENT == 3) std::cout << "checksend" << checksend << std::endl;
+
                 if (checksend < 0)
                 {
                     //close(client_fd);
                     std::cerr << "cannot send message to web" << web_fd << std::endl;
+                    throw "Error sending message back to client in CONNECT";
                 }
             }
         }
 
-        // Then back and force
     }
 
     HTTPResponse getResponse()
@@ -943,8 +964,7 @@ class HTTPRequest : public HTTP
         // Get hostname
         std::unordered_map<std::string, std::string> reqheader = getheader();
 
-        if (DEVELOPMENT)
-            std::cout << "Host is: " << hostaddr << std::endl;
+        if (DEVELOPMENT == 4) std::cout << "Host is: " << hostaddr << std::endl;
 
         int status;
         int web_fd;
@@ -973,8 +993,7 @@ class HTTPRequest : public HTTP
             std::cerr << "Error: cannot create socket to the web" << std::endl;
         }
 
-        if (DEVELOPMENT > 2)
-            std::cout << "Connecting to " << hostname << " on port " << portnum << "..." << std::endl;
+        if (DEVELOPMENT == 4) std::cout << "Connecting to " << hostname << " on port " << portnum << "..." << std::endl;
 
         status = connect(web_fd, host_info_list->ai_addr, host_info_list->ai_addrlen);
         if (status == -1)
@@ -982,19 +1001,19 @@ class HTTPRequest : public HTTP
             std::cerr << "Error: cannot connect to socket to the web" << std::endl;
         }
 
-        if (DEVELOPMENT > 2)
-            std::cout << "Connected to web" << std::endl;
+        if (DEVELOPMENT == 4) std::cout << "Connected to web" << std::endl;
 
         int sizesend = send(web_fd, &getBuffer().data()[0], getBuffer().size(), 0);
 
-        if (DEVELOPMENT > 2)
-            std::cout << "Request send to web: " << std::endl;
+        if (DEVELOPMENT == 4) std::cout << "Request send to web: " << std::endl;
 
         std::vector<char> tempbuf = myrecv(web_fd);
 
-        if (DEVELOPMENT > 1)
-            std::cout << "Buffer received from real server: " << std::endl
-                      << tempbuf.data() << std::endl;
+        if (DEVELOPMENT == 4) std::cout << "Buffer received from real server: " << std::endl << tempbuf.data() << std::endl;
+
+        if (tempbuf.size() < 2) {
+            throw "Empty response in getResponse";
+        }
 
         // Construct response
         HTTPResponse ans(tempbuf);
