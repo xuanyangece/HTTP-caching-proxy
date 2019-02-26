@@ -455,7 +455,7 @@ class HTTPRequest : public HTTP
         if (NULL == hent)
         {
             std::cout << "Cannot get IP" << std::endl;
-            return;
+            throw "404 Not Found";
         }
 
         char *clientIP;

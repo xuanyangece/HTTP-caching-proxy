@@ -101,7 +101,6 @@ std::vector<char> myrecv(int myfd)
 {
     std::vector<char> tempbuf;
     std::vector<char> tempseg(TEMPSIZE);
-
     while (1)
     {
         //std::cout << "In myrecv loop" << std::endl;
@@ -120,12 +119,9 @@ std::vector<char> myrecv(int myfd)
         {
             tempbuf.push_back(tempseg[i]);
         }
-
+        
         //std::cout << "Tempbuf size: " << tempbuf.size() << std::endl;
-        /*
-            May need to change to std::fill
-        */
-        std::fill(tempseg.begin(), tempseg.end(), '\0');
+        tempseg.clear();
 
         if (segsize < TEMPSIZE || (segsize == TEMPSIZE && tempbuf[tempbuf.size() - 1] == '\0'))
         { // Finish receive
@@ -134,18 +130,7 @@ std::vector<char> myrecv(int myfd)
             std::unordered_map<std::string, std::string> tempheader = tempres.getheader();
             if (tempheader.find("Content-Length") == tempheader.end())
             {
-                // handle chunked
-                if (tempheader.find("Transfer-Encoding") != tempheader.end() && tempheader["Transfer-Encoding"] == "chunked")
-                {
-                    if (DEVELOPMENT)
-                        std::cout << "\nChunked here!\n";
-                    tempbuf.pop_back();
-                    return handleChunked(myfd, tempbuf);
-                }
-                else
-                {
-                    break;
-                }
+                break;
             }
             std::string tempbody = tempres.getBody();
             //std::cout << "Body size in buffer: " << tempbody.size() << std::endl;
@@ -156,8 +141,8 @@ std::vector<char> myrecv(int myfd)
             }
             else
             {
-                //                std::cout << "OK, print whole temp buffer: " << std::endl;
-                // std::cout << tempbuf.data() << std::endl;
+                std::cout << "OK, print whole temp buffer: " << std::endl;
+                std::cout << tempbuf.data() << std::endl;
             }
         }
 
@@ -274,12 +259,16 @@ void handlehttp(int reqfd)
                   << "The content is: " << std::endl
                   << tempbuf.data() << std::endl;
 
-    HTTPRequest newreq(tempbuf);
+    try {
+        HTTPRequest newreq(tempbuf);
+        // Handle request
+        newreq.handlereq(reqfd);
 
-    // Handle request
-    newreq.handlereq(reqfd);
-
-    close(reqfd);
+        close(reqfd);
+    } catch (const char* msg) {
+        return404(reqfd);
+        close(reqfd);
+    }
 }
 
 std::string readAge(std::string control)
