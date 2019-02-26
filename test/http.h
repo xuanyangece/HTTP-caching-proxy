@@ -1,5 +1,6 @@
 #include <arpa/inet.h>
 #include <cstring>
+#include <fstream>
 #include <iostream>
 #include <mutex>
 #include <netdb.h>
@@ -12,15 +13,39 @@
 #include <unordered_map>
 #include <vector>
 
+#define TEMPSIZE 3331
+
 #define DEVELOPMENT 1
+#define LOG "/var/log/erss/proxy.log" // Name and path of the log
 
+std::mutex mymutex;
+std::vector<char> myrecv(int myfd);
 std::string readAge(std::string control);
+std::string computeExpire(std::string checkDate, std::string age_tmp);
 std::string getNow();
+void return404(int client_fd);
+
 bool isExpire(std::string now, std::string date, std::string seconds);
+bool isExpire(std::string now, std::string date);
 
-/*
+// BEGIN_REF - https://www.youtube.com/watch?v=ojOUIg13g3I&t=543s
+class MyLock {
+private:
+  std::mutex *mtx;
 
- */
+public:
+  explicit MyLock(std::mutex *temp) {
+    temp->lock();
+    mtx = temp;
+    std::cout << "\n\nLOCKED !!!!!!!!\n\n";
+  }
+
+  ~MyLock() {
+    mtx->unlock();
+    std::cout << "\n\nUNLOCKED !!!!!!!!\n\n";
+  }
+};
+// END_REF
 
 class HTTP {
 protected:
@@ -87,33 +112,8 @@ public:
   std::vector<char> getBuffer() { return buffer; }
 
   std::string getBody() { return body; }
-};
 
-class HTTPResponse : public HTTP {
-private:
-  std::string code;
-  std::string reason;
-
-public:
-  HTTPResponse() {}
-
-  HTTPResponse(std::vector<char> temp) {
-    buffer = temp;
-    parseBuffer();
-  }
-
-  HTTPResponse(const HTTPResponse &rhs) {
-    buffer = rhs.buffer;
-    parseBuffer();
-  }
-
-  HTTPResponse &operator=(const HTTPResponse &rhs) {
-    if (this != &rhs) {
-      buffer = rhs.buffer;
-      parseBuffer();
-    }
-    return *this;
-  }
+  std::string getStartLine() { return startline; }
 
   void reParse() {
     std::vector<char> temp;
@@ -161,6 +161,33 @@ public:
     temp.push_back('\0');
 
     buffer = temp;
+  }
+};
+
+class HTTPResponse : public HTTP {
+private:
+  std::string code;
+  std::string reason;
+
+public:
+  HTTPResponse() {}
+
+  HTTPResponse(std::vector<char> temp) {
+    buffer = temp;
+    parseBuffer();
+  }
+
+  HTTPResponse(const HTTPResponse &rhs) {
+    buffer = rhs.buffer;
+    parseBuffer();
+  }
+
+  HTTPResponse &operator=(const HTTPResponse &rhs) {
+    if (this != &rhs) {
+      buffer = rhs.buffer;
+      parseBuffer();
+    }
+    return *this;
   }
 
   virtual void parseBuffer() {
@@ -228,6 +255,8 @@ public:
 };
 
 std::unordered_map<std::string, HTTPResponse> cache;
+int checkResponse(HTTPResponse response);
+int checkExpire(HTTPResponse response);
 
 class HTTPRequest : public HTTP {
 private:
@@ -236,26 +265,63 @@ private:
   std::string port;
   std::string hostaddr;
   std::string IP;
+  int ID;
+  std::ofstream log;
 
 public:
-  HTTPRequest() {}
+  static int amount;
 
   HTTPRequest(std::vector<char> temp) {
     buffer = temp;
     parseBuffer();
+    ID = amount;
+    amount++;
+    log.open(LOG, std::ios::app);
+    printInitialMsg();
   }
 
   HTTPRequest(const HTTPRequest &rhs) {
     buffer = rhs.buffer;
     parseBuffer();
+    ID = amount;
+    amount++;
+    log.open(LOG, std::ios::app);
+    printInitialMsg();
   }
 
   HTTPRequest &operator=(const HTTPRequest &rhs) {
     if (this != &rhs) {
       buffer = rhs.buffer;
       parseBuffer();
+      ID = amount;
+      amount++;
+      log.open(LOG, std::ios::app);
+      printInitialMsg();
     }
     return *this;
+  }
+
+  ~HTTPRequest() { log.close(); }
+
+  void printInitialMsg() {
+    time_t now;
+    struct tm *nowdate;
+    time(&now);
+    nowdate = gmtime(&now);
+    log << ID << ": "
+        << "\"" << startline << "\""
+        << " from " << IP << " @ " << asctime(nowdate);
+  }
+
+  void printReceiving(std::string line) {
+    log << ID << ": Responding "
+        << "\"" << line << "\"" << std::endl;
+  }
+
+  void printReceived(std::string line) {
+    log << ID << ": Received "
+        << "\"" << line << "\""
+        << " from " << hostaddr << std::endl;
   }
 
   virtual void parseBuffer() {
@@ -325,6 +391,18 @@ public:
     }
 
     // Update IP
+    struct hostent *hent;
+    hent = gethostbyname(hostaddr.c_str());
+    if (NULL == hent) {
+      std::cout << "Cannot get IP" << std::endl;
+      throw "404 Not Found";
+    }
+
+    char *clientIP;
+    // get from h_addr
+    clientIP = inet_ntoa(*(struct in_addr *)hent->h_addr);
+
+    IP = clientIP;
   }
 
   virtual void readStartLine(std::string line) {
@@ -357,72 +435,269 @@ public:
   }
 
   void handlereq(int client_fd) {
-    if (method == "GET") {
-      doGET(client_fd);
-    } else if (method == "POST") {
-      doPOST(client_fd);
-    } else if (method == "CONNECT") {
-      doCONNECT(client_fd);
+    try {
+      if (method == "GET") {
+        doGET(client_fd);
+      } else if (method == "POST") {
+        doPOST(client_fd);
+      } else if (method == "CONNECT") {
+        doCONNECT(client_fd);
+      }
+    } catch (const char *msg) {
+      return404(client_fd);
+      close(client_fd);
     }
   }
 
   void doGET(int client_fd) {
+    MyLock lk(&mymutex);
     HTTPResponse responsefound;
-    // No "Cache-Control" in req header
-    if (header.find("Cache-Control") == header.end()) {
-      // Check if cache has response
-      if (cache.find(startline) != cache.end()) {
-        // get response
-        HTTPResponse unchecked_res = cache[startline];
-        std::unordered_map<std::string, std::string> unchecked_header =
-            unchecked_res.accessHeader();
 
-        // check if has "Cache-Control"
-        if (unchecked_header.find("Cache-Control") != unchecked_header.end()) {
-          std::string res_control = unchecked_header["Cache-Control"];
+    if (cache.find(startline) != cache.end()) // cache has response
+    {
+      std::cout << "find in cache! " << std::endl;
 
-          // Has max-age
-          if (res_control.find("max-age") != std::string::npos) {
-            // Get time in response
-            std::string seconds = readAge(res_control);
-            std::string date = unchecked_header["date"];
+      responsefound = cache[startline];
 
-            // Get time now
-            std::string now = getNow();
+      int checkE = checkExpire(responsefound);
 
-            bool expired = isExpire(now, date, seconds);
+      std::cout << "check Expire: " << checkExpire << std::endl;
+
+      std::unordered_map<std::string, std::string> response_header =
+          responsefound.getheader();
+
+      // if has expired or needed to revalidate, modify the previous request
+      // buffer
+      if (checkE == 0 || checkE == 1 || checkE == 3) {
+        /*
+                LOG VALIDATION - if req contains no-cache
+        */
+        if (checkContent("no-cache") || checkE == 0) {
+          log << ID << ": in cache, requires validation" << std::endl;
+        }
+
+        /*
+                LOG EXPIRED - res has "Date" and "max-age"
+        */
+        else if (checkE == 1) {
+          std::string expireDate = response_header["Date"];
+          log << ID << ": in cache, but expired at " << expireDate << std::endl;
+        }
+
+        /*
+                LOG EXPIRED - res has "Expires"
+        */
+        else if (checkE == 3) {
+          std::string expireDate = response_header["Expires"];
+          log << ID << ": in cache, but expired at " << expireDate << std::endl;
+        }
+
+        // Validation process
+        if (response_header.find("Etag") == response_header.end() ||
+            response_header.find("Last-Modified") == response_header.end()) {
+          // Get new response from server because validation fail
+          responsefound = getResponse();
+
+          if (responsefound.getCode() != "200") {
+            printReceiving(responsefound.getStartLine());
+            int ret = send(client_fd, &responsefound.getBuffer().data()[0],
+                           responsefound.getBuffer().size(), 0);
+            printReceived(responsefound.getStartLine());
+            return;
           }
+
+          /*
+                  LOG NOT CACHEABLE: max-age/no-store in request header
+          */
+          if (checkContent("max-age=0")) {
+            log << ID << ": not cacheable because max-age=0 in request header"
+                << std::endl;
+          } else if (checkContent("no-store")) {
+            log << ID << ": not cacheable because no-store in request header"
+                << std::endl;
+          } else {
+            int mycheck = checkResponse(responsefound);
+            int format = checkExpire(responsefound);
+            std::unordered_map<std::string, std::string> temphd =
+                responsefound.getheader();
+
+            /*
+                      LOG NOT CACHEABLE: max-age/no-store in response header
+            */
+            if (mycheck == 1) {
+
+              log << ID << ": not cacheable because no-store in response header"
+                  << std::endl;
+            } else if (mycheck == 2) {
+              log << ID << ": not cacheable because private in response header"
+                  << std::endl;
+            }
+
+            /*
+                      LOG CACHED, BUT RE_VALIDATION - by checking response
+               header
+            */
+            else if (mycheck == 3 || format == 0) {
+              log << ID << ": cached, but requires re-validation" << std::endl;
+              cache[startline] = responsefound;
+            }
+
+            /*
+                      LOG CACHED, EXPIRES AT
+            */
+            else if (format == 1 || format == 2) { // has "max-age" and "Date"
+              std::string seconds = readAge(temphd["Cache-Control"]);
+              std::string date = temphd["Date"];
+              std::string expires = computeExpire(date, seconds);
+
+              log << ID << ": cached, expires at " << expires << std::endl;
+              cache[startline] = responsefound;
+            } else if (format == 3 || 4) { // has "Expires"
+              log << ID << ": cached, expires at " << temphd["Expires"]
+                  << std::endl;
+              cache[startline] = responsefound;
+            }
+          }
+
+          // final send back
+          printReceiving(responsefound.getStartLine());
+          int ret = send(client_fd, &responsefound.getBuffer().data()[0],
+                         responsefound.getBuffer().size(), 0);
+          printReceived(responsefound.getStartLine());
+
+          return;
+        }
+
+        header["If-None-Match"] = response_header["Etag"];
+        header["If-Modified-Since"] = response_header["Last-Modified"];
+        reParse();
+        getBuffer();
+
+        // send the modified buffer to get a new response and check if validate
+        responsefound = getResponse();
+        std::string newCode = responsefound.getCode();
+
+        // if is validate, reture the response in cache
+        if (newCode.compare("304") == 0) {
+          responsefound = cache[startline];
+
+          printReceiving(responsefound.getStartLine());
+          int ret = send(client_fd, &responsefound.getBuffer().data()[0],
+                         responsefound.getBuffer().size(), 0);
+          printReceived(responsefound.getStartLine());
+          return;
+        }
+
+        // if not validate, return the new 200 ok response and update the cache
+        if (newCode.compare("200") == 0) {
+          cache[startline] = responsefound;
+
+          printReceiving(responsefound.getStartLine());
+          int ret = send(client_fd, &responsefound.getBuffer().data()[0],
+                         responsefound.getBuffer().size(), 0);
+          printReceived(responsefound.getStartLine());
+          return;
         }
       }
-      // No response, get a new one
+      // if is not expired, return it
       else {
-        responsefound = getResponse();
+        /*
+                LOG VALID
+        */
+        log << ID << ": in cache, valid" << std::endl;
+        responsefound = cache[startline];
 
-        // if 200, store it in cache
-        if (responsefound.getCode == "200")
-          ;
-        cache[startline] = responsefound;
-
+        printReceiving(responsefound.getStartLine());
         int ret = send(client_fd, &responsefound.getBuffer().data()[0],
                        responsefound.getBuffer().size(), 0);
+        printReceived(responsefound.getStartLine());
+        return;
+      }
+    } else { // need to check if could store in cache
+      /*
+              LOG NOT IN CACHE
+      */
+      log << ID << ": not in cache" << std::endl;
+
+      responsefound = getResponse();
+
+      // If code != 200, go away
+      if (responsefound.getCode() != "200") {
+        printReceiving(responsefound.getStartLine());
+        int ret = send(client_fd, &responsefound.getBuffer().data()[0],
+                       responsefound.getBuffer().size(), 0);
+        printReceived(responsefound.getStartLine());
         return;
       }
 
-    }
-    // "Cache-Control" in header
-    else {
-      std::string msg = header["Cache-Control"];
-      // Option 1: "no-store", get response directly from server
-      if (msg.find("no-store") != std::string::npos) {
-        responsefound = getResponse();
-        int ret = send(client_fd, &responsefound.getBuffer().data()[0],
-                       responsefound.getBuffer().size(), 0);
-        return;
+      /*
+              LOG NOT CACHEABLE: max-age/no-store in request header
+      */
+      if (checkContent("max-age=0")) {
+        log << ID << ": not cacheable because max-age=0 in request header"
+            << std::endl;
+      } else if (checkContent("no-store")) {
+        log << ID << ": not cacheable because no-store in request header"
+            << std::endl;
+      } else {
+        int mycheck = checkResponse(responsefound);
+        int format = checkExpire(responsefound);
+        std::unordered_map<std::string, std::string> temphd =
+            responsefound.getheader();
+
+        /*
+                  LOG NOT CACHEABLE: max-age/no-store in response header
+        */
+        if (mycheck == 1) {
+          log << ID << ": not cacheable because no-store in response header"
+              << std::endl;
+        } else if (mycheck == 2) {
+          log << ID << ": not cacheable because private in response header"
+              << std::endl;
+        }
+
+        /*
+                  LOG CACHED, BUT RE_VALIDATION - by checking response header
+        */
+        else if (mycheck == 3 || format == 0) {
+          log << ID << ": cached, but requires re-validation" << std::endl;
+          cache[startline] = responsefound;
+        }
+
+        /*
+                  LOG CACHED, EXPIRES AT
+        */
+        else if (format == 1 || format == 2) { // has "max-age" and "Date"
+          std::string seconds = readAge(temphd["Cache-Control"]);
+          std::string date = temphd["Date"];
+          std::string expires = computeExpire(date, seconds);
+
+          log << ID << ": cached, expires at " << expires << std::endl;
+          cache[startline] = responsefound;
+        } else if (format == 3 || 4) { // has "Expires"
+          log << ID << ": cached, expires at " << temphd["Expires"]
+              << std::endl;
+          cache[startline] = responsefound;
+        }
       }
-      // Option 2: "no-cache", validate before use the cache
-      if (msg.find("no-cache") != std::string::npos) {
+
+      // final send back
+      printReceiving(responsefound.getStartLine());
+      int ret = send(client_fd, &responsefound.getBuffer().data()[0],
+                     responsefound.getBuffer().size(), 0);
+      printReceived(responsefound.getStartLine());
+    }
+  }
+
+  // Check request has the specific content
+  bool checkContent(std::string content) {
+    if (header.find("Cache-Control") != header.end()) {
+      std::string control = header["Cache-Control"];
+      if (control.find(content) != std::string::npos) {
+        return true;
       }
     }
+    return false;
   }
 
   void doPOST(int client_fd) {
@@ -437,10 +712,12 @@ public:
     std::unordered_map<std::string, std::string> reqheader = getheader();
     std::string host = reqheader["Host"];
     size_t s;
+
     if (s = host.find(":443") != std::string::npos) {
       s = host.find(":443");
       host = host.substr(0, s);
     }
+
     if (DEVELOPMENT == 0)
       std::cout << "Host is: " << host << std::endl;
 
@@ -451,7 +728,7 @@ public:
     const char *hostname = host.c_str();
     const char *port = "443";
     if (DEVELOPMENT == 0)
-      std::cout << "hostnameis: " << hostname << std::endl;
+      std::cout << "hostname is: " << hostname << std::endl;
 
     memset(&host_info, 0, sizeof(host_info));
     host_info.ai_family = AF_INET;
@@ -460,6 +737,7 @@ public:
     status = getaddrinfo(hostname, port, &host_info, &host_info_list);
     if (status != 0) {
       std::cerr << "Error: cannot get address info for host" << std::endl;
+      throw "404 Not Found";
     }
     // build socket
     web_fd = socket(host_info_list->ai_family, host_info_list->ai_socktype,
@@ -571,6 +849,11 @@ public:
   }
 
   HTTPResponse getResponse() {
+    // Log
+    log << ID << ": Requesting "
+        << "\"" << startline << "\""
+        << " from " << hostaddr << std::endl;
+
     // Get hostname
     std::unordered_map<std::string, std::string> reqheader = getheader();
 
@@ -591,6 +874,7 @@ public:
     status = getaddrinfo(hostname, portnum, &host_info, &host_info_list);
     if (status != 0) {
       std::cerr << "Error: cannot get address info for host" << std::endl;
+      throw "404 Not Found";
     }
 
     web_fd = socket(host_info_list->ai_family, host_info_list->ai_socktype,
