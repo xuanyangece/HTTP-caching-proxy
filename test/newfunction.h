@@ -3,7 +3,7 @@
 #include <iomanip>
 
 // 1 - myrecv
-#define DEVELOPMENT 1
+#define FUNCDEVELOPMENT 1
 
 // 1 - checkExpire
 #define CHECKMINOR 0
@@ -132,7 +132,7 @@ std::vector<char> myrecv(int myfd)
     {
         int segsize = recv(myfd, &tempseg.data()[0], TEMPSIZE, 0);
 
-        if (DEVELOPMENT == 1) std::cout<<"RECV SIZE = "<<segsize<<std::endl;
+        if (FUNCDEVELOPMENT == 1) std::cout<<"RECV SIZE = "<<segsize<<std::endl;
 
         if (segsize < 0)
         {
@@ -146,11 +146,11 @@ std::vector<char> myrecv(int myfd)
             tempbuf.push_back(tempseg[i]);
         }
 
-        if (DEVELOPMENT == 1) std::cout<<"Loop middle\n";
+        if (FUNCDEVELOPMENT == 1) std::cout<<"Loop middle\n";
         
         std::fill(tempseg.begin(), tempseg.end(), '\0');
 
-        if (DEVELOPMENT == 1) std::cout<<"after fill\n";
+        if (FUNCDEVELOPMENT == 1) std::cout<<"after fill\n";
 
         // Has to be done first
         if (segsize == 0)
@@ -162,7 +162,7 @@ std::vector<char> myrecv(int myfd)
 
         if (segsize < TEMPSIZE)
         { 
-            if (DEVELOPMENT == 1) std::cout<<"Enter if\n";
+            if (FUNCDEVELOPMENT == 1) std::cout<<"Enter if\n";
             
             // Finish receive
             tempbuf.push_back('\0');
@@ -175,8 +175,8 @@ std::vector<char> myrecv(int myfd)
             }
 
             std::string tempbody = tempres.getBody();
-            if (DEVELOPMENT == 1) std::cout << "Body size in buffer: " << tempbody.size() << std::endl;
-            if (DEVELOPMENT == 1) std::cout << "Content-Length: " << tempheader["Content-Length"] << std::endl;
+            if (FUNCDEVELOPMENT == 1) std::cout << "Body size in buffer: " << tempbody.size() << std::endl;
+            if (FUNCDEVELOPMENT == 1) std::cout << "Content-Length: " << tempheader["Content-Length"] << std::endl;
 
             if (tempbody.size() >= std::stoi(tempheader["Content-Length"]) - 1)
             {
@@ -189,7 +189,8 @@ std::vector<char> myrecv(int myfd)
         }
     }
 
-    if (DEVELOPMENT == 1) std::cout << "Final tempbuf size: " << tempbuf.size() << std::endl;
+    if (FUNCDEVELOPMENT == 1) std::cout << "Final tempbuf size: " << tempbuf.size() << std::endl;
+    if (FUNCDEVELOPMENT == 1) std::cout << "Final tempbuf: \n\"" << tempbuf.data() <<"\""<< std::endl;
 
     return tempbuf;
 }
@@ -199,7 +200,7 @@ std::vector<char> myrecv(int myfd)
 */
 void handlehttp(int reqfd)
 {
-    MyLock lk(&mymutex);
+    
     std::ofstream log(LOG, std::ios::app);
 
     // Get request
@@ -207,6 +208,7 @@ void handlehttp(int reqfd)
 
     // Determine whether browser got cache :)
     if (tempbuf.size() < 2) {
+        std::cout<<"\nIn handlehttp: received empty buffer from client\n\n";
         close(reqfd);
     }
 
@@ -238,7 +240,7 @@ std::string readAge(std::string control)
     else
         ans = control.substr(age, colon - age);
 
-    if (DEVELOPMENT)
+    if (FUNCDEVELOPMENT)
         std::cout << "Age is " << ans << " seconds.\n"
                   << std::endl;
     return ans;

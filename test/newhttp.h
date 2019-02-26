@@ -20,7 +20,7 @@
 // 2 - doGET
 // 3 - doCONNECT
 // 4 - getResponse
-#define DEVELOPMENT 1
+#define HTTPDEVELOPMENT 3
 #define LOG "/var/log/erss/proxy.log" // Name and path of the log
 
 
@@ -98,7 +98,7 @@ class HTTP
                     std::string value = line.substr(colon + 1);
                     header[key] = value;
 
-                    if (DEVELOPMENT == 1)
+                    if (HTTPDEVELOPMENT == 1)
                         std::cout << "Key: " << key << " & Value: " << value << std::endl;
                 }
             }
@@ -108,18 +108,18 @@ class HTTP
                 std::string value = line.substr(colon + 2);
                 header[key] = value;
 
-                if (DEVELOPMENT == 1)
+                if (HTTPDEVELOPMENT == 1)
                     std::cout << "Key: " << key << " & Value: " << value << std::endl;
             }
 
             lines.erase(0, pos + 2);
         }
 
-        if (DEVELOPMENT == 1) std::cout << "After read header, total " << header.size() << " headers" << std::endl;
+        if (HTTPDEVELOPMENT == 1) std::cout << "After read header, total " << header.size() << " headers" << std::endl;
         
         lines.erase(0, 2);
         
-        if (DEVELOPMENT == 1) std::cout << "Remain body: " << lines << std::endl;
+        if (HTTPDEVELOPMENT == 1) std::cout << "Remain body: " << lines << std::endl;
 
         return lines;
     }
@@ -213,12 +213,14 @@ class HTTPResponse : public HTTP
 
     HTTPResponse(std::vector<char> temp)
     {
+        std::cout<<"\n\nConstructor for response\n\n";
         buffer = temp;
         parseBuffer();
     }
 
     HTTPResponse(const HTTPResponse &rhs)
     {
+        std::cout<<"\n\nCopy constructor for request\n\n";
         buffer = rhs.buffer;
         parseBuffer();
     }
@@ -227,6 +229,7 @@ class HTTPResponse : public HTTP
     {
         if (this != &rhs)
         {
+            std::cout<<"\n\nAssignment constructor for request\n\n";
             buffer = rhs.buffer;
             parseBuffer();
         }
@@ -248,14 +251,14 @@ class HTTPResponse : public HTTP
         }
         startline = temp.substr(0, pos);
 
-        if (DEVELOPMENT > 1)
+        if (HTTPDEVELOPMENT == 1)
         {
             std::cout << "Startline is: " << startline << std::endl;
         }
 
         readStartLine(startline);
 
-        if (DEVELOPMENT > 1)
+        if (HTTPDEVELOPMENT == 1)
         {
             std::cout << "After read startline, HTTP version is: " << HTTPversion << std::endl;
             std::cout << "And code is: " << code << std::endl;
@@ -265,7 +268,7 @@ class HTTPResponse : public HTTP
 
         temp.erase(0, pos + 2);
 
-        if (DEVELOPMENT > 1)
+        if (HTTPDEVELOPMENT == 1)
         {
             std::cout << "Erase startline, the rest is: " << std::endl
                       << temp << std::endl;
@@ -329,6 +332,7 @@ class HTTPRequest : public HTTP
 
     HTTPRequest(std::vector<char> temp)
     {
+        std::cout<<"\n\nConstructor for request\n\n";
         buffer = temp;
         parseBuffer();
         ID = amount;
@@ -339,6 +343,7 @@ class HTTPRequest : public HTTP
 
     HTTPRequest(const HTTPRequest &rhs)
     {
+        std::cout<<"\n\nCopy constructor for request\n\n";
         buffer = rhs.buffer;
         parseBuffer();
         ID = amount;
@@ -351,6 +356,7 @@ class HTTPRequest : public HTTP
     {
         if (this != &rhs)
         {
+            std::cout<<"\n\nAssignment constructor for request\n\n";
             buffer = rhs.buffer;
             parseBuffer();
             ID = amount;
@@ -405,13 +411,13 @@ class HTTPRequest : public HTTP
         }
         startline = temp.substr(0, pos);
 
-        if (DEVELOPMENT == 1) std::cout << "Startline is: " << startline << std::endl;
+        if (HTTPDEVELOPMENT == 1) std::cout << "Startline is: " << startline << std::endl;
 
         readStartLine(startline);
 
         temp.erase(0, pos + 2);
 
-        if (DEVELOPMENT == 1) std::cout << "\nErase startline, the rest is: " << std::endl << temp << std::endl<< std::endl;
+        if (HTTPDEVELOPMENT == 1) std::cout << "\nErase startline, the rest is: " << std::endl << temp << std::endl<< std::endl;
 
         // Parse header & get body
         body = readHeader(temp);
@@ -515,6 +521,7 @@ class HTTPRequest : public HTTP
             // Method supported
             if (method == "GET")
             {
+                MyLock lk(&mymutex);
                 doGET(client_fd);
             }
             else if (method == "POST")
@@ -543,13 +550,13 @@ class HTTPRequest : public HTTP
 
         if (cache.find(startline) != cache.end())  // cache has response
         { 
-            if (DEVELOPMENT == 2) std::cout << "find in cache! " << std::endl;
+            if (HTTPDEVELOPMENT == 2) std::cout << "find in cache! " << std::endl;
 
             responsefound = cache[startline];
 
             int checkE = checkExpire(responsefound);
 
-            if (DEVELOPMENT == 2) std::cout << "check Expire: " << checkExpire << std::endl;
+            if (HTTPDEVELOPMENT == 2) std::cout << "check Expire: " << checkExpire << std::endl;
 
             
             std::unordered_map<std::string, std::string> response_header = responsefound.getheader();
@@ -807,7 +814,7 @@ class HTTPRequest : public HTTP
             host = host.substr(0, s);
         }
 
-        if (DEVELOPMENT == 3) std::cout << "Host is: " << host << std::endl;
+        if (HTTPDEVELOPMENT == 3) std::cout << "Host is: " << host << std::endl;
 
         int status;
         int web_fd;
@@ -837,7 +844,7 @@ class HTTPRequest : public HTTP
             throw "Error creating socket to the server";
         }
 
-        if (DEVELOPMENT == 3) std::cout << "Connecting to " << hostname << "on port" << port << "..." << std::endl;
+        if (HTTPDEVELOPMENT == 3) std::cout << "Connecting to " << hostname << "on port" << port << "..." << std::endl;
         
         //connect host
         status = connect(web_fd, host_info_list->ai_addr, host_info_list->ai_addrlen);
@@ -847,7 +854,7 @@ class HTTPRequest : public HTTP
             throw "Error connecting socket to the server";
         }
 
-        if (DEVELOPMENT == 3) std::cout << "Connected to web successfully" << std::endl;
+        if (HTTPDEVELOPMENT == 3) std::cout << "Connected to web successfully" << std::endl;
 
         //send 200 OK info back to browser
         std::string sendOK("HTTP/1.1 200 OK\r\n\r\n");
@@ -858,7 +865,7 @@ class HTTPRequest : public HTTP
             throw "Error sending 200 OK to client";
         }
 
-        if (DEVELOPMENT == 3) 
+        if (HTTPDEVELOPMENT == 3) 
         {
             std::cout << "start to handle https" << std::endl;
             std::cout << "web_fd&resfd: " << web_fd << std::endl;
@@ -873,7 +880,7 @@ class HTTPRequest : public HTTP
             FD_SET(web_fd, &fds);
             FD_SET(client_fd, &fds);
 
-            if (DEVELOPMENT == 3) std::cout << "start to select" << std::endl;
+            if (HTTPDEVELOPMENT == 3) std::cout << "start to select" << std::endl;
 
             int checkselect = select(sizeof(fds) * 3, &fds, NULL, NULL, NULL);
             if (checkselect == -1)
@@ -882,12 +889,12 @@ class HTTPRequest : public HTTP
                 throw "Fail select in CONNECT";
             }
 
-            if (DEVELOPMENT == 3) std::cout << "start select succesfully" << std::endl << "select:" << checkselect << std::endl;
+            if (HTTPDEVELOPMENT == 3) std::cout << "start select succesfully" << std::endl << "select:" << checkselect << std::endl;
             
             //if the web send a message, receive and send back to browser
             if (FD_ISSET(web_fd, &fds))
             {
-                if (DEVELOPMENT == 3) std::cout << "receive from the web" << std::endl;
+                if (HTTPDEVELOPMENT == 3) std::cout << "receive from the web" << std::endl;
 
 
                 std::vector<char> recv_data(CONNECTSIZE);
@@ -902,15 +909,15 @@ class HTTPRequest : public HTTP
 
                 if (recvsize == 0)
                 {
-                    if (DEVELOPMENT == 3) std::cout << "web close" << std::endl;
+                    if (HTTPDEVELOPMENT == 3) std::cout << "web close" << std::endl;
                     return;
                 }
 
                 recv_data.push_back('\0');
 
-                if (DEVELOPMENT == 3) std::cout << "trying to sent to the client" << std::endl;
+                if (HTTPDEVELOPMENT == 3) std::cout << "trying to sent to the client" << std::endl;
                 int checksend = send(client_fd, recv_data.data(), recvsize, MSG_NOSIGNAL);
-                if (DEVELOPMENT == 3) std::cout << "checksend: " << checksend << std::endl;
+                if (HTTPDEVELOPMENT == 3) std::cout << "checksend: " << checksend << std::endl;
 
                 if (checksend < 0)
                 {
@@ -921,13 +928,13 @@ class HTTPRequest : public HTTP
             //if the browser send a message, receive and send back to web
             else if (FD_ISSET(client_fd, &fds))
             {
-                if (DEVELOPMENT == 3) std::cout << "receive from the browser" << std::endl;
+                if (HTTPDEVELOPMENT == 3) std::cout << "receive from the browser" << std::endl;
 
                 std::vector<char> recv_data(CONNECTSIZE);
                 std::fill(recv_data.begin(), recv_data.end(), '\0');
                 int recvsize = recv(client_fd, &recv_data.data()[0], CONNECTSIZE, 0);
 
-                if (DEVELOPMENT == 3) std::cout << "check recv size:" << recvsize << std::endl;
+                if (HTTPDEVELOPMENT == 3) std::cout << "check recv size:" << recvsize << std::endl;
                 if (recvsize < 0)
                 {
                     std::cerr << "Error: fail to receive from client" << std::endl;
@@ -936,12 +943,12 @@ class HTTPRequest : public HTTP
 
                 if (recvsize == 0)
                 {
-                    if (DEVELOPMENT == 3) std::cout << "browser close" << std::endl;
+                    if (HTTPDEVELOPMENT == 3) std::cout << "browser close" << std::endl;
                     return;
                 }
 
                 int checksend = send(web_fd, recv_data.data(), recvsize, MSG_NOSIGNAL);
-                if (DEVELOPMENT == 3) std::cout << "checksend" << checksend << std::endl;
+                if (HTTPDEVELOPMENT == 3) std::cout << "checksend" << checksend << std::endl;
 
                 if (checksend < 0)
                 {
@@ -964,7 +971,7 @@ class HTTPRequest : public HTTP
         // Get hostname
         std::unordered_map<std::string, std::string> reqheader = getheader();
 
-        if (DEVELOPMENT == 4) std::cout << "Host is: " << hostaddr << std::endl;
+        if (HTTPDEVELOPMENT == 4) std::cout << "Host is: " << hostaddr << std::endl;
 
         int status;
         int web_fd;
@@ -993,7 +1000,7 @@ class HTTPRequest : public HTTP
             std::cerr << "Error: cannot create socket to the web" << std::endl;
         }
 
-        if (DEVELOPMENT == 4) std::cout << "Connecting to " << hostname << " on port " << portnum << "..." << std::endl;
+        if (HTTPDEVELOPMENT == 4) std::cout << "Connecting to " << hostname << " on port " << portnum << "..." << std::endl;
 
         status = connect(web_fd, host_info_list->ai_addr, host_info_list->ai_addrlen);
         if (status == -1)
@@ -1001,15 +1008,15 @@ class HTTPRequest : public HTTP
             std::cerr << "Error: cannot connect to socket to the web" << std::endl;
         }
 
-        if (DEVELOPMENT == 4) std::cout << "Connected to web" << std::endl;
+        if (HTTPDEVELOPMENT == 4) std::cout << "Connected to web" << std::endl;
 
         int sizesend = send(web_fd, &getBuffer().data()[0], getBuffer().size(), 0);
 
-        if (DEVELOPMENT == 4) std::cout << "Request send to web: " << std::endl;
+        if (HTTPDEVELOPMENT == 4) std::cout << "Request send to web: " << std::endl;
 
         std::vector<char> tempbuf = myrecv(web_fd);
 
-        if (DEVELOPMENT == 4) std::cout << "Buffer received from real server: " << std::endl << tempbuf.data() << std::endl;
+        if (HTTPDEVELOPMENT == 4) std::cout << "Buffer received from real server: " << std::endl << tempbuf.data() << std::endl;
 
         if (tempbuf.size() < 2) {
             throw "Empty response in getResponse";
