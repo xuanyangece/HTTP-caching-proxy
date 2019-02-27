@@ -15,6 +15,7 @@
   0 - NO PRINT
   1 - checkExpire
   2 - handleChunk
+  3 - handlehttp
 */
 #define CHECKMINOR 0
 
@@ -178,7 +179,7 @@ int checkExpire(HTTPResponse response) {
   std::unordered_map<std::string, std::string> header = response.getheader();
   if (header.find("Cache-Control") != header.end()) {
 
-    if (CHECKMINOR == 0)
+    if (CHECKMINOR == 1)
       std::cout << "check header[Cache-Control]: " << header["Cache-Control"]
                 << std::endl;
 
@@ -188,7 +189,7 @@ int checkExpire(HTTPResponse response) {
         header.find("Date") != header.end()) {
       std::string max_age = readAge(cache_control);
 
-      if (CHECKMINOR == 0)
+      if (CHECKMINOR == 1)
         std::cout << "max_age" << max_age << std::endl;
 
       std::string now_time = getNow();
@@ -206,7 +207,7 @@ int checkExpire(HTTPResponse response) {
   if (header.find("Expires") != header.end()) {
     std::string now_time = getNow();
 
-    if (CHECKMINOR == 0)
+    if (CHECKMINOR == 1)
       std::cout << "check header[Expires]: " << header["Expires"] << std::endl;
 
     std::string expiretime = header["Expires"];
@@ -299,7 +300,7 @@ std::vector<char> myrecv(int myfd) {
 
     // Has to be done first
     if (segsize == 0) {
-      std::cout << "\nTHIS IS A EMPTY REQUEST\n\n";
+      if (FUNCDEVELOPMENT == 1) std::cout << "\nTHIS IS A EMPTY REQUEST\n\n";
       tempbuf.push_back('\0');
       break;
     }
@@ -372,7 +373,7 @@ void handlehttp(int reqfd) {
 
   // Determine whether browser got cache :)
   if (tempbuf.size() < 2) {
-    std::cout << "\nIn handlehttp: received empty buffer from client\n\n";
+    if (CHECKMINOR == 3) std::cout << "\nIn handlehttp: received empty buffer from client\n\n";
     close(reqfd);
   }
 
