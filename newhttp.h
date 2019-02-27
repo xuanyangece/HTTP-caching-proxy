@@ -12,6 +12,8 @@
 #include <unistd.h>
 #include <time.h>
 #include <fstream>
+#include <list>
+#include <utility>
 
 #define TEMPSIZE 33331
 #define CONNECTSIZE 51200
@@ -309,7 +311,60 @@ class HTTPResponse : public HTTP
     }
 };
 
-std::unordered_map<std::string, HTTPResponse> cache;
+
+//BEGIN_REF - https://leetcode.com/problems/lru-cache/discuss/45976/C%2B%2B11-code-74ms-Hash-table-%2B-List
+class MyCache {
+    private:
+    typedef std::list<std::string> LIST;
+    typedef std::pair<HTTPResponse, LIST::iterator> PAIR;
+    typedef std::unordered_map<std::string, PAIR> MAP;
+
+    LIST used;
+    MAP cache;
+    size_t _capacity;
+
+    void touch(MAP::iterator it) {
+        std::string key = it->first;
+
+        // change used
+        used.erase(it->second.second);
+        used.push_front(key);
+
+        it->second.second = used.begin();
+    }
+
+    public:
+    MyCache(size_t capacity) : _capacity(capacity) {}
+
+    bool checkExist(std::string startline) {
+        auto it = cache.find(startline);
+        if (it == cache.end()) return false;
+        else return true;
+    }
+
+    HTTPResponse get(std::string startline) {
+        auto it = cache.find(startline);
+        touch(it);
+        return it->second.first;
+    }
+
+    void put(std::string startline, HTTPResponse res) {
+        auto it = cache.find(startline);
+        if (it != cache.end()) touch(it);
+        else {
+            if (used.size() == _capacity) {
+                cache.erase(used.back());
+                used.pop_back();
+            }
+            used.push_front(startline);
+        }
+        cache[startline] = {res, used.begin()};
+    }
+};
+//END_REF
+
+
+MyCache cache(10);
 int checkResponse(HTTPResponse response);
 int checkExpire(HTTPResponse response);
 
@@ -542,11 +597,11 @@ class HTTPRequest : public HTTP
     {
         HTTPResponse responsefound;
 
-        if (cache.find(startline) != cache.end())  // cache has response
+        if (cache.checkExist(startline))  // cache has response
         { 
             if (HTTPDEVELOPMENT == 2) std::cout << "find in cache! " << std::endl;
 
-            responsefound = cache[startline];
+            responsefound = cache.get(startline);
 
             int checkE = checkExpire(responsefound);
 
@@ -624,7 +679,7 @@ class HTTPRequest : public HTTP
                         */
                         else if (mycheck == 3 || format == 0) {
                             log<<ID<<": cached, but requires re-validation"<<std::endl;
-                            cache[startline] = responsefound;
+                            cache.put(startline, responsefound);
                         }
 
                         /*
@@ -636,11 +691,11 @@ class HTTPRequest : public HTTP
                             std::string expires = computeExpire(date, seconds);
 
                             log<<ID<<": cached, expires at "<<expires<<std::endl;
-                            cache[startline] = responsefound;
+                            cache.put(startline, responsefound);
                         }
                         else if (format == 3 || 4) { // has "Expires"
                             log<<ID<<": cached, expires at "<<temphd["Expires"]<<std::endl;
-                            cache[startline] = responsefound;
+                            cache.put(startline, responsefound);
                         }
 
                     }
@@ -666,7 +721,7 @@ class HTTPRequest : public HTTP
                 //if is validate, reture the response in cache
                 if (newCode.compare("304") == 0)
                 {
-                    responsefound = cache[startline];
+                    responsefound = cache.get(startline);
 
                     printReceiving(responsefound.getStartLine());
                     int ret = send(client_fd, &responsefound.getBuffer().data()[0], responsefound.getBuffer().size(), 0);
@@ -677,7 +732,7 @@ class HTTPRequest : public HTTP
                 //if not validate, return the new 200 ok response and update the cache
                 if (newCode.compare("200") == 0)
                 {
-                    cache[startline] = responsefound;
+                    cache.put(startline, responsefound);
 
                     printReceiving(responsefound.getStartLine());
                     int ret = send(client_fd, &responsefound.getBuffer().data()[0], responsefound.getBuffer().size(), 0);
@@ -692,7 +747,7 @@ class HTTPRequest : public HTTP
                     LOG VALID
                 */
                 log << ID << ": in cache, valid" << std::endl;
-                responsefound = cache[startline];
+                responsefound = cache.get(startline);
 
                 printReceiving(responsefound.getStartLine());
                 int ret = send(client_fd, &responsefound.getBuffer().data()[0], responsefound.getBuffer().size(), 0);
@@ -746,7 +801,7 @@ class HTTPRequest : public HTTP
                 */
                 else if (mycheck == 3 || format == 0) {
                     log<<ID<<": cached, but requires re-validation"<<std::endl;
-                    cache[startline] = responsefound;
+                    cache.put(startline, responsefound);
                 }
 
                 /*
@@ -758,11 +813,11 @@ class HTTPRequest : public HTTP
                     std::string expires = computeExpire(date, seconds);
 
                     log<<ID<<": cached, expires at "<<expires<<std::endl;
-                    cache[startline] = responsefound;
+                    cache.put(startline, responsefound);
                 }
                 else if (format == 3 || 4) { // has "Expires"
                     log<<ID<<": cached, expires at "<<temphd["Expires"]<<std::endl;
-                    cache[startline] = responsefound;
+                    cache.put(startline, responsefound);
                 }
 
             }
@@ -1026,5 +1081,7 @@ class HTTPRequest : public HTTP
         return ans;
     }
 };
+
+
 
 
