@@ -247,7 +247,7 @@ class HTTPResponse : public HTTP
         size_t pos = temp.find("\r\n");
         if (pos == std::string::npos)
         {
-            std::cout << "Error parsing first line" << std::endl;
+            std::cout << "Error parsing first line in request" << std::endl;
             return;
         }
         startline = temp.substr(0, pos);
@@ -457,7 +457,7 @@ class HTTPRequest : public HTTP
         size_t pos = temp.find("\r\n");
         if (pos == std::string::npos)
         {
-            std::cout << "Error parsing first line" << std::endl;
+            std::cout << "Error parsing first line in response" << std::endl;
             // THROW INFO
             throw "400";
         }

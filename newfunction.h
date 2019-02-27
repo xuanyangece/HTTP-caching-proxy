@@ -366,7 +366,7 @@ void handlehttp(int reqfd) {
 
       close(reqfd);
     } catch (const char *msg) {
-      if (msg == "400") return404(reqfd);
+      if (msg == "400") return400(reqfd);
       else return404(reqfd);
       close(reqfd);
     }
