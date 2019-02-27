@@ -1,4 +1,4 @@
-02/18: We find that if the receive buffer size is fixed when receiving client’s request, the buffer may not receive the whole content of that request. So we need to check the size of buffer and make sure it will be received thoroughly. 
+02/18: We find that if ythe receive buffer size is fixed when receiving client’s request, the buffer may not receive the whole content of that request. So we need to check the size of buffer and make sure it will be received thoroughly. 
 
 02/18: Before multithreading, we find that it’s not really possible to receive response from GET even from one single page. Sometimes the single page will send several files like CSS and JS back and forth. So everywhere in the program should consider multithreading.
 
@@ -20,6 +20,10 @@
 
 02/22: We find that some exceptions might happen during the execution. So the proxy should handle these gracefully, which means we need to take what error might happen into consideration in our code.
 
+02/23: We find that it’s important to manage the mutex well. Sometimes error happens and it’s likely to forget to unlock the mutex. So we use RAII strategy: in our function to handle GET(because different thread use same cache here), we use an object to lock our mutex, and when that scope exits, the object will be destructed and mutex will be unlock.
+
 02/24: About handle external failures: From a bad request's perspective, we check request's content and if it's not appropriate, "400 Bad Request" will be returned. From a valid formatted request, if the server doesn't exist, error message will be thrown during the process of connecting to the server and will be caught by the general "handlereq" method. And "404 Not Found" will be returned. And for corrupted response, we check the content of response, if it's not valid formatted. We will not return this response but "502 Bad Response”.
 
 02/26: We find that if the browser's internal cache is used, the content will render on the browser but we can get empty request. This has been considered in our code and safely handled by checking the request content.
+
+02/27: To test the 502, we specially write a program to receive request and send bad response, and that’s in the test502 directory. And there’s a README.txt to guide how to use.
