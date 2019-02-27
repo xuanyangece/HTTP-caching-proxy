@@ -32,6 +32,7 @@ std::string readAge(std::string control);
 std::string computeExpire(std::string checkDate, std::string age_tmp);
 std::string getNow();
 void return404(int client_fd);
+void return400(int client_fd);
 
 bool isExpire(std::string now, std::string date, std::string seconds);
 bool isExpire(std::string now, std::string date);
@@ -584,7 +585,8 @@ class HTTPRequest : public HTTP
             
             // Method not supported
             else {
-                throw "Method only support GET, POST and CONNECT";
+                return400(client_fd);
+                close(client_fd);
             }
         } catch (const char* msg) {
             return404(client_fd);
@@ -1037,7 +1039,7 @@ class HTTPRequest : public HTTP
         if (status != 0)
         {
             std::cerr << "Error: cannot get address info for host" << std::endl;
-            throw "404 Not Found";
+            throw "404 Not Found - cannot get host info";
         }
 
         web_fd = socket(host_info_list->ai_family,
@@ -1047,6 +1049,7 @@ class HTTPRequest : public HTTP
         if (web_fd == -1)
         {
             std::cerr << "Error: cannot create socket to the web" << std::endl;
+            throw "404 Not found - cannot create socket to web";
         }
 
         if (HTTPDEVELOPMENT == 4) std::cout << "Connecting to " << hostname << " on port " << portnum << "..." << std::endl;
@@ -1055,6 +1058,7 @@ class HTTPRequest : public HTTP
         if (status == -1)
         {
             std::cerr << "Error: cannot connect to socket to the web" << std::endl;
+            throw "404 Not Found - cannot connect socket to web";
         }
 
         if (HTTPDEVELOPMENT == 4) std::cout << "Connected to web" << std::endl;

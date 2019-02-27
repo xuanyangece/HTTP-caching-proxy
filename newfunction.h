@@ -215,6 +215,8 @@ int checkExpire(HTTPResponse response) {
   return 0;
 }
 
+
+
 /*
     If address cannot find, return 404 to client
 */
@@ -225,6 +227,23 @@ void return404(int client_fd) {
                      "text/html\r\n\r\n<html><body>Not Found</body></html>\n");
   int len = send(client_fd, header.c_str(), header.length(), MSG_NOSIGNAL);
 }
+
+
+
+
+/*
+  If have bad request, return400
+*/
+void return400(int client_fd) {
+  std::cout << "Bad request" << std::endl;
+  std::string header("HTTP/1.1 400 Bad Request\r\nContent-Length: "
+                     "38\r\nConnection: close\r\nContent-Type: "
+                     "text/html\r\n\r\n<html><body>Bad Request</body></html>\n");
+  int len = send(client_fd, header.c_str(), header.length(), MSG_NOSIGNAL);
+}
+
+
+
 
 /*
     Receive buffer from client
