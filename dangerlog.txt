@@ -1,0 +1,25 @@
+02/18: We find that if the receive buffer size is fixed when receiving client’s request, the buffer may not receive the whole content of that request. So we need to check the size of buffer and make sure it will be received thoroughly. 
+
+02/18: Before multithreading, we find that it’s not really possible to receive response from GET even from one single page. Sometimes the single page will send several files like CSS and JS back and forth. So everywhere in the program should consider multithreading.
+
+02/18: We find that special attention needs to be paid on HTTP version. Majority of current request/response version is HTTP/1.1, but HTTP/2 and HTTP/1.0 should also be taken care of.
+
+02/19: We find that in order to find the IP address of host, “Host” value in header is not compatible sometimes. If user specifies port number after URL or it’s a CONNECT request, it’s the “Host” value should be parsed. 
+
+02/19: We find that not all HTTP goes into port “80” or “433". Sometimes in application like Django, users can run the server and specifies port number. In that way we need to use dynamic port to get the response.
+
+02/20: For the response whose “Transfer-Encoding” is “chunked”, we need to receive response several times until the last chunk is received. And sometimes the “Accept-Encoding” is “gzip”, we should follow the chunk size rule strictly.
+
+02/20: We find that the client may not send qualified request every time. So if bad request is sent, the proxy should recognize it and response with “400 Bad Request”. Sometimes the target server doesn’t exist, in this situation it should response with “404 not found”.
+
+02/20: We find that the terminator ‘\0’ affects the validity of our message. Especially in CONNECT request, if the content stays the same but it doesn’t have terminator or have multiple terminators, the connection between the server would be shut down.
+
+02/21: We find that since cache should be shared among all threads, it’s important to keep its access synchronized. According to RAII, we define a new class to help us use mutex. 
+
+02/21: We find that our proxy can hold handle HTTP, if other protocols are used. The proxy should send 400 to the client.
+
+02/22: We find that some exceptions might happen during the execution. So the proxy should handle these gracefully, which means we need to take what error might happen into consideration in our code.
+
+02/24: About handle external failures: From a bad request's perspective, we check request's content and if it's not appropriate, "400 Bad Request" will be returned. From a valid formatted request, if the server doesn't exist, error message will be thrown during the process of connecting to the server and will be caught by the general "handlereq" method. And "404 Not Found" will be returned. And for corrupted response, we check the content of response, if it's not valid formatted. We will not return this response but "502 Bad Response”.
+
+02/26: We find that if the browser's internal cache is used, the content will render on the browser but we can get empty request. This has been considered in our code and safely handled by checking the request content.

@@ -17,6 +17,7 @@
 
 #define TEMPSIZE 33331
 #define CONNECTSIZE 51200
+#define CACHESIZE 128
 
 // 1 - parseBuffer & readHeader
 // 2 - doGET
@@ -365,7 +366,7 @@ class MyCache {
 //END_REF
 
 
-MyCache cache(10);
+MyCache cache(CACHESIZE);
 int checkResponse(HTTPResponse response);
 int checkExpire(HTTPResponse response);
 
