@@ -1,117 +1,35 @@
-This file is used to describe test cases we have to make the proxy server more robust.
-The browser we used to test is firefox.
-To run myproxy program, enter make first and then enter ./myproxy. If you want to check the log file, you need to enter sudo ./myproxy, then enter /var/log/erss, and use cat proxy.log.
+This file is used to describe test cases we have to make the proxy server more robust. The browser we used to test is firefox.To run myproxy program, enter make first and then enter ./myproxy. If you want to check the log file, you need to enter sudo ./myproxy, then enter /var/log/erss, and use cat proxy.log. 1.Common cases:1) Test GET:Websites that we used to test:Website:  http://example.com This website only sends GET request and when we check log file, the first time it shows:7: "GET http://example.com/ HTTP/1.1" from 93.184.216.34 @ Wed Feb 27 01:25:57 20197: not in cache7: Requesting "GET http://example.com/ HTTP/1.1" from example.com7: not cacheable because max-age=0 in request header7: Responding "HTTP/1.1 200 OK"7: Received "HTTP/1.1 200 OK" from example.comRefresh the screen:8: "GET http://example.com/ HTTP/1.1" from 93.184.216.34 @ Wed Feb 27 01:27:04 20198: not in cache8: Requesting "GET http://example.com/ HTTP/1.1" from example.com8: not cacheable because max-age=0 in request header8: Responding "HTTP/1.1 200 OK"8: Received "HTTP/1.1 200 OK" from example.comFrom the log file, it is not cacheable because we will check the requestÕs header first, if we find max-age=0, we wonÕt cache it. Website:  http://people.duke.edu/~bmr23/ece568/class.html This website contains many links and files, we test if we could click the links and jump, it works well.  In the log file:13: "GET http://people.duke.edu/~bmr23/style.css HTTP/1.1" from 152.3.72.105 @ Wed Feb 27 01:30:08 201913: not in cache13: Requesting "GET http://people.duke.edu/~bmr23/style.css HTTP/1.1" from people.duke.edu13: cached, but requires re-validation13: Responding "HTTP/1.1 200 OK"13: Received "HTTP/1.1 200 OK" from people.duke.eduRefresh the screen:15: "GET http://people.duke.edu/~bmr23/style.css HTTP/1.1" from 152.3.72.105 @ Wed Feb 27 01:33:05 201915: in cache, requires validation15: Requesting "GET http://people.duke.edu/~bmr23/style.css HTTP/1.1" from people.duke.edu15: Responding "HTTP/1.1 304 Not Modified"15: Received "HTTP/1.1 304 Not Modified" from people.duke.eduWe only list the cached response below, it contains right message.Website: http://iczn.org/ This website contains html, css and js, we could open it but much slower.  We check the log file again. Just list one of these responses:17: "GET http://iczn.org/misc/throbber-inactive.png HTTP/1.1" from 157.140.2.32 @ Wed Feb 27 01:40:36 201917: not in cache17: Requesting "GET http://iczn.org/misc/throbber-inactive.png HTTP/1.1" from iczn.org17: cached, expires at Fri, 29 Mar 2019 16:06:17 GMTIt correctly prints out the expire time.Other websites:http://www.artsci.utoronto.ca/futurestudents http://rabihyounes.com/awesome.txt  Those huge website will send several requests and some of them are GET, some of them are CONNECT.
 
-1.Common cases:
-1) Test GET:
-Websites that we used to test:
-Website:  http://example.com
-This website only sends GET request and when we check log file, the first time it shows:
 
-7: "GET http://example.com/ HTTP/1.1" from 93.184.216.34 @ Wed Feb 27 01:25:57 2019
-7: not in cache
-7: Requesting "GET http://example.com/ HTTP/1.1" from example.com
-7: not cacheable because max-age=0 in request header
-7: Responding "HTTP/1.1 200 OK"
-7: Received "HTTP/1.1 200 OK" from example.com
 
-Refresh the screen:
+2) Test CONNECT:For CONNECT, we testhttps://www.google.com/ https://www.youtube.com/ https://www.amazon.com/  https://www.baidu.com/ We also click the links, pictures and videos in the screen page, and it works well. 3) Test POST:To test POST, we use our first Django project.We run the program in shell and load the page:http://vcm-7996.vm.duke.edu:8000/  We test register, log in and create a new order, and the request is like:POST http://vcm-7996.vm.duke.edu:8000/ride/register/ HTTP/1.1Host: vcm-7996.vm.duke.edu:8000
 
-8: "GET http://example.com/ HTTP/1.1" from 93.184.216.34 @ Wed Feb 27 01:27:04 2019
-8: not in cache
-8: Requesting "GET http://example.com/ HTTP/1.1" from example.com
-8: not cacheable because max-age=0 in request header
-8: Responding "HTTP/1.1 200 OK"
-8: Received "HTTP/1.1 200 OK" from example.com
 
-From the log file, it is not cacheable because we will check the requestâ€™s header first, if we find max-age=0, we wonâ€™t cache it.
 
-Website:  http://people.duke.edu/~bmr23/ece568/class.html
-This website contains many links and files, we test if we could click the links and jump, it works well.  In the log file:
 
-13: "GET http://people.duke.edu/~bmr23/style.css HTTP/1.1" from 152.3.72.105 @ Wed Feb 27 01:30:08 2019
-13: not in cache
-13: Requesting "GET http://people.duke.edu/~bmr23/style.css HTTP/1.1" from people.duke.edu
-13: cached, but requires re-validation
-13: Responding "HTTP/1.1 200 OK"
-13: Received "HTTP/1.1 200 OK" from people.duke.edu
 
-Refresh the screen:
 
-15: "GET http://people.duke.edu/~bmr23/style.css HTTP/1.1" from 152.3.72.105 @ Wed Feb 27 01:33:05 2019
-15: in cache, requires validation
-15: Requesting "GET http://people.duke.edu/~bmr23/style.css HTTP/1.1" from people.duke.edu
-15: Responding "HTTP/1.1 304 Not Modified"
-15: Received "HTTP/1.1 304 Not Modified" from people.duke.edu
+2. Handle errors and unusual situations 1) Transfer-encoding: chunked:Small: http://www.httpwatch.com/httpgallery/chunked/chunkedimage.aspx It will show a colorful picture.Test a complicated website, its requests will include GET, CONNECT and those response includes normal ones and chunked ones.http://rabihyounes.com/ 
 
-We only list the cached response below, it contains right message.
 
-Website: http://iczn.org/
-This website contains html, css and js, we could open it but much slower.
- We check the log file again. Just list one of these responses:
-
-17: "GET http://iczn.org/misc/throbber-inactive.png HTTP/1.1" from 157.140.2.32 @ Wed Feb 27 01:40:36 2019
-17: not in cache
-17: Requesting "GET http://iczn.org/misc/throbber-inactive.png HTTP/1.1" from iczn.org
-17: cached, expires at Fri, 29 Mar 2019 16:06:17 GMT
-
-It correctly prints out the expire time.
-
-Other websites:
-http://www.artsci.utoronto.ca/futurestudents
-http://rabihyounes.com/awesome.txt
-
-Those huge website will send several requests and some of them are GET, some of them are CONNECT.
-
-2) Test CONNECT:
-For CONNECT, we test
-https://www.google.com/
-https://www.youtube.com/
-https://www.amazon.com/
-https://www.baidu.com/
-
-We also click the links, pictures and videos in the screen page, and it works well.
-
-3) Test POST:
-To test POST, we use our first Django project.
-We run the program in shell and load the page:
-http://vcm-7996.vm.duke.edu:8000/
-
-We test register, log in and create a new order, and the request is like:
-
-POST http://vcm-7996.vm.duke.edu:8000/ride/register/ HTTP/1.1
-Host: vcm-7996.vm.duke.edu:8000
-
-2. Handle errors and unusual situations
-
-1) Transfer-encoding: chunked:
-Small: http://www.httpwatch.com/httpgallery/chunked/chunkedimage.aspx
-It will show a colorful picture.
-
-Test a complicated website, its requests will include GET, CONNECT and those response includes normal ones and chunked ones.
-http://rabihyounes.com/
-
-2) 404 not found:
+2) 404 not found:
 When we try to enter a web which doesn't exist, it should return 404 not found
 The whole response is:
-HTTP/1.1 404 Not Found
-Content-Length:36
-Connection: close
-Content-Type: text/html\r\n\r\n<html><body>Not Found</body></html>
+"HTTP/1.1 404 Not Found\r\nContent-Length: 36\r\nConnection: close\r\nContent-Type: text/html\r\n\r\n<html><body>Not Found</body></html>\n"
 
 We use:
-http://fdhfiasudf.com/
+http://fdhfiasudf.com/ 
 http://1.com/
 http://2.34.55.565/
 
-3) 400 bad request:
+
+
+3) 400 bad request:
 If the request doesn't start with GET, CONNECT or POST, it will return a 400 bad request.
 
 The whole response is:
-HTTP/1.1 400 Bad Request
-Content-Length: 38
-Connection: close
-Content-Type: text/html
+"HTTP/1.1 400 Bad Request\r\nContent-Length: 38\r\nConnection: close\r\nContent-Type: text/html\r\n\r\n<html><body>Bad Request</body></html>\n"
+
 
 We use nc command to test:
 
@@ -124,8 +42,10 @@ echo -e "" | nc vcm-8117.vm.duke.edu 12345
 echo -e " ht999" | nc vcm-8117.vm.duke.edu 12345
 (Chaos data)
 
-4) 502 bad gateway:
-If we send a normal request to a server but it returns some chaos response, our server will return a 502 bad gateway to the browser.
+
+
+4) 502 bad gateway:
+If we send a normal request to a server but it returns some chaos response, our proxy will return a 502 bad gateway to the browser.
 
 The whole response is:
 HTTP/1.1 502 Bad Gateway
@@ -133,9 +53,11 @@ Content-Length: 38
 Connection: close
 Content-Type: text/html
 
-<html><body>Bad Gateway</body></html>
+<html><body>Bad Gateway</body></html>We use several terminals and nc command to test. First of all, we build a simple server which could send user-designed response. 
 
-We use two terminals and nc command to test. First of all, we build a simple server which could send back response. We run this mal_server and our program in on terminal, and then run the other terminal, with command:
+At first we keep our proxy running, then we run this mal_server program in another terminal. And then use nc to send normal request to the mal_server, with command:
 echo -e "GET vcm-8117.vm.duke.edu:8080 HTTP/1.1\r\nHost: vcm-8117.vm.duke.edu:8080\r\n\r\n" | nc vcm-7996.vm.duke.edu 12345
 
-Then, we use the server to send some chaos response, like: dfhahfsaduihf, to our server. Then, the nc command will print 502 Bad Gateway.
+Next our mal_server received the request normally, but we on purpose send bad response like: dfhahfsaduihf, to the proxy. Then, the proxy find it's a bad response and the nc command will print 502 Bad Gateway.
+
+
