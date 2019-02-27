@@ -1,4 +1,4 @@
-02/18: We find that if ythe receive buffer size is fixed when receiving client’s request, the buffer may not receive the whole content of that request. So we need to check the size of buffer and make sure it will be received thoroughly. 
+02/18: We find that if the receive buffer size is fixed when receiving client’s request, the buffer may not receive the whole content of that request. So we need to check the size of buffer and make sure it will be received thoroughly. 
 
 02/18: Before multithreading, we find that it’s not really possible to receive response from GET even from one single page. Sometimes the single page will send several files like CSS and JS back and forth. So everywhere in the program should consider multithreading.
 
@@ -14,7 +14,7 @@
 
 02/20: We find that the terminator ‘\0’ affects the validity of our message. Especially in CONNECT request, if the content stays the same but it doesn’t have terminator or have multiple terminators, the connection between the server would be shut down.
 
-02/21: We find that since cache should be shared among all threads, it’s important to keep its access synchronized. According to RAII, we define a new class to help us use mutex. 
+02/21: We find that since cache should be shared among all threads, it’s important to keep its access synchronized. According to RAII, we define a new class to help us use mutex. We tested concurrency and it works correctly. 
 
 02/21: We find that our proxy can hold handle HTTP, if other protocols are used. The proxy should send 400 to the client.
 
