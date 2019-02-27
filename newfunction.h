@@ -2,11 +2,20 @@
 #include <cstdlib>
 #include <iomanip>
 
-// 1 - myrecv
+
+/*
+  Print debug message in specific functions:
+  0 - NO PRINT
+  1 - myrecv
+*/
 #define FUNCDEVELOPMENT 0
 
-// 1 - checkExpire
-// 2 - handleChunk
+/*
+  Print debug message in specific functions:
+  0 - NO PRINT
+  1 - checkExpire
+  2 - handleChunk
+*/
 #define CHECKMINOR 0
 
 #define LOG "/var/log/erss/proxy.log" // Name and path of the log
@@ -232,7 +241,7 @@ void return404(int client_fd) {
 
 
 /*
-  If have bad request, return400
+  If have bad request, return 400 to client
 */
 void return400(int client_fd) {
   std::cout << "Bad request" << std::endl;
@@ -241,6 +250,19 @@ void return400(int client_fd) {
                      "text/html\r\n\r\n<html><body>Bad Request</body></html>\n");
   int len = send(client_fd, header.c_str(), header.length(), MSG_NOSIGNAL);
 }
+
+
+/*
+  If have bad response, return 502 to client
+*/
+void return502(int client_fd) {
+  std::cout << "Bad request" << std::endl;
+  std::string header("HTTP/1.1 502 Bad Request\r\nContent-Length: "
+                     "38\r\nConnection: close\r\nContent-Type: "
+                     "text/html\r\n\r\n<html><body>Bad Gateway</body></html>\n");
+  int len = send(client_fd, header.c_str(), header.length(), MSG_NOSIGNAL);
+}
+
 
 
 

@@ -15,15 +15,20 @@
 #include <list>
 #include <utility>
 
-#define TEMPSIZE 33331
-#define CONNECTSIZE 51200
-#define CACHESIZE 128
+#define TEMPSIZE 33331  // Temporary buffer size for recv
+#define CONNECTSIZE 51200   // Buffer size for transmission CONNECT
+#define CACHESIZE 128   // Cache size
 
-// 1 - parseBuffer & readHeader
-// 2 - doGET
-// 3 - doCONNECT
-// 4 - getResponse
+/*
+    Print debug message in specific methods:
+    0 - NO PRINT
+    1 - parseBuffer & readHeader
+    2 - doGET
+    3 - doCONNECT
+    4 - getResponse
+*/
 #define HTTPDEVELOPMENT 0
+
 #define LOG "/var/log/erss/proxy.log" // Name and path of the log
 
 
@@ -34,10 +39,15 @@ std::string computeExpire(std::string checkDate, std::string age_tmp);
 std::string getNow();
 void return404(int client_fd);
 void return400(int client_fd);
+void return502(int client_fd);
 
 bool isExpire(std::string now, std::string date, std::string seconds);
 bool isExpire(std::string now, std::string date);
 
+
+/*
+    Lock using RAII
+*/
 //BEGIN_REF - https://www.youtube.com/watch?v=ojOUIg13g3I&t=543s
 class MyLock
 {
@@ -60,19 +70,23 @@ class MyLock
 };
 //END_REF
 
+
+/*
+    HTTP used for HTTPRequest and HTTPResponse
+*/
 class HTTP
 {
   protected:
-    std::vector<char> buffer;
-    std::string startline;
-    std::unordered_map<std::string, std::string> header;
-    std::string body;
-    std::string HTTPversion;
+    std::vector<char> buffer;  // Buffer used for send & recv
+    std::string startline;  // Startline
+    std::unordered_map<std::string, std::string> header; // Header
+    std::string body;   // Body
+    std::string HTTPversion;    // HTTPversion
 
   public:
-    virtual void parseBuffer() = 0;
-    virtual void readStartLine(std::string line) = 0;
-    virtual ~HTTP() {}
+    virtual void parseBuffer() = 0; // Parse received buffer to generate other fields
+    virtual void readStartLine(std::string line) = 0;   // Parse startline
+    virtual ~HTTP() {} 
 
     /*
         Read header into an unordered_map, return body as string
@@ -128,31 +142,49 @@ class HTTP
         return lines;
     }
 
+    /*
+        Return reference of header
+    */
     std::unordered_map<std::string, std::string> &accessHeader()
     {
         return header;
     }
 
+    /*
+        Return copy of header
+    */
     std::unordered_map<std::string, std::string> getheader()
     {
         return header;
     }
 
+    /*
+        Return copy of buffer
+    */
     std::vector<char> getBuffer()
     {
         return buffer;
     }
 
+    /*
+        Return copy of body
+    */
     std::string getBody()
     {
         return body;
     }
 
+    /*
+        Return copy of startline
+    */
     std::string getStartLine()
     {
         return startline;
     }
 
+    /*
+        When content changes, use this to generate new buffer
+    */
     void reParse()
     {
         std::vector<char> temp;
@@ -206,24 +238,31 @@ class HTTP
     }
 };
 
+/*
+    HTTPResponse class to store info of a response
+*/
 class HTTPResponse : public HTTP
 {
   private:
-    std::string code;
-    std::string reason;
+    std::string code;   // Response code
+    std::string reason; // Response reason
 
   public:
+    bool valid; // Flag to determine 502
+    
     HTTPResponse() {}
 
     HTTPResponse(std::vector<char> temp)
     {
         buffer = temp;
+        valid = false;
         parseBuffer();
     }
 
     HTTPResponse(const HTTPResponse &rhs)
     {
         buffer = rhs.buffer;
+        valid = false;
         parseBuffer();
     }
 
@@ -232,22 +271,24 @@ class HTTPResponse : public HTTP
         if (this != &rhs)
         {
             buffer = rhs.buffer;
+            valid = false;
             parseBuffer();
         }
         return *this;
     }
 
-
+    /*
+        Parse received buffer to generate other fields
+    */
     virtual void parseBuffer()
     {
-
         std::string temp = buffer.data();
 
         // Parse start line
         size_t pos = temp.find("\r\n");
         if (pos == std::string::npos)
         {
-            std::cout << "Error parsing first line in request" << std::endl;
+            std::cout << "Error parsing first line in response" << std::endl;
             return;
         }
         startline = temp.substr(0, pos);
@@ -277,8 +318,14 @@ class HTTPResponse : public HTTP
 
         // Parse header & get body
         body = readHeader(temp);
+
+        // Set valid
+        valid = true;
     }
 
+    /*
+        Parse startline
+    */
     virtual void readStartLine(std::string line)
     {
         // Read HTTP version
@@ -286,7 +333,7 @@ class HTTPResponse : public HTTP
         if (pos == std::string::npos)
         {
             std::cout << "Error in reading method" << std::endl;
-            return;
+            throw "502";
         }
 
         HTTPversion = line.substr(0, pos);
@@ -297,7 +344,7 @@ class HTTPResponse : public HTTP
         if (pos == std::string::npos)
         {
             std::cout << "Error in reading url" << std::endl;
-            return;
+            throw "502";
         }
 
         code = line.substr(0, pos);
@@ -307,13 +354,20 @@ class HTTPResponse : public HTTP
         reason = line;
     }
 
+    /*
+        Return copy of response code
+    */
     std::string getCode()
     {
         return code;
     }
 };
 
-
+/*
+    Cache class implementing LRU.
+    Size can be specified in CACHESIZE.
+    Part of it referred from Leetcode
+*/
 //BEGIN_REF - https://leetcode.com/problems/lru-cache/discuss/45976/C%2B%2B11-code-74ms-Hash-table-%2B-List
 class MyCache {
     private:
@@ -370,6 +424,9 @@ MyCache cache(CACHESIZE);
 int checkResponse(HTTPResponse response);
 int checkExpire(HTTPResponse response);
 
+/*
+    HTTPRequest class to store info of a request
+*/
 class HTTPRequest : public HTTP
 {
   private:
@@ -438,10 +495,16 @@ class HTTPRequest : public HTTP
             << " from " << IP << " @ " << asctime(nowdate);
     }
 
+    /*
+        Print log when responding
+    */
     void printReceiving(std::string line) {
         log << ID << ": Responding "<< "\"" << line << "\"" << std::endl;
     }
 
+    /*
+        Print log when received
+    */
     void printReceived(std::string line) {
         log << ID << ": Received "<< "\"" << line << "\""<< " from " << hostaddr << std::endl;
     }
@@ -457,7 +520,7 @@ class HTTPRequest : public HTTP
         size_t pos = temp.find("\r\n");
         if (pos == std::string::npos)
         {
-            std::cout << "Error parsing first line in response" << std::endl;
+            std::cout << "Error parsing first line in request" << std::endl;
             // THROW INFO
             throw "400";
         }
@@ -585,18 +648,23 @@ class HTTPRequest : public HTTP
                 doCONNECT(client_fd);
             }
             
-            // Method not supported
+            // Method not supported, bad request
             else {
                 return400(client_fd);
                 close(client_fd);
             }
         } catch (const char* msg) {
+            // Catch 404 not found
             return404(client_fd);
             close(client_fd);
         }
 
     }
 
+
+    /*
+        Method to handle GET
+    */
     void doGET(int client_fd)
     {
         HTTPResponse responsefound;
@@ -766,7 +834,17 @@ class HTTPRequest : public HTTP
             */
             log<<ID<<": not in cache"<<std::endl;
 
+            /*
+                CHECK BAD RESPONSE
+            */
             responsefound = getResponse();
+            if (responsefound.valid == false) {
+                std::cout<<" Response error"<<std::endl;
+                return502(client_fd);
+                close(client_fd);
+                return;
+            }
+            
 
             // If code != 200, go away
             if (responsefound.getCode() != "200") {
@@ -847,6 +925,9 @@ class HTTPRequest : public HTTP
         return false;
     }
 
+    /*
+        Method to handle POST
+    */
     void doPOST(int client_fd)
     {
         HTTPResponse responsefound = getResponse();
@@ -854,6 +935,10 @@ class HTTPRequest : public HTTP
         int ret = send(client_fd, &responsefound.getBuffer().data()[0], responsefound.getBuffer().size(), 0);
     }
 
+
+    /*
+        Method to handle CONNECT
+    */
     void doCONNECT(int client_fd)
     {
         //get hostname
@@ -1014,6 +1099,9 @@ class HTTPRequest : public HTTP
 
     }
 
+    /*
+        Get a HTTP response from server
+    */
     HTTPResponse getResponse()
     {
         // Log
@@ -1026,12 +1114,14 @@ class HTTPRequest : public HTTP
 
         if (HTTPDEVELOPMENT == 4) std::cout << "Host is: " << hostaddr << std::endl;
 
+        // Socket stuff
         int status;
         int web_fd;
         struct addrinfo host_info;
         struct addrinfo *host_info_list;
         const char *hostname = hostaddr.c_str();
         const char *portnum = port.c_str();
+
 
         memset(&host_info, 0, sizeof(host_info));
         host_info.ai_family = AF_INET;
