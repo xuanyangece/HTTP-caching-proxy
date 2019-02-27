@@ -11,7 +11,7 @@
 #define DEVELOPMENT 1                 // Development or production
 #define LOG "/var/log/erss/proxy.log" // Name and path of the log
 
-int HTTPRequest::amount = 0;
+int HTTPRequest::amount = 0;  // Total amount of request to manage ID
 
 int main(int argc, char **argv) {
   // clear log
@@ -84,6 +84,8 @@ int main(int argc, char **argv) {
       std::thread mythread(handlehttp, reqfd);
       mythread.detach();
     } catch (std::exception &e) {
+      // General catch exception to return 404, rarely gets here though
+      // Because we have other try & catch in handlehttp
       std::cout << e.what() << std::endl;
       return404(reqfd);
       close(reqfd);

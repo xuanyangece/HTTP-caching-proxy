@@ -26,6 +26,7 @@
     2 - doGET
     3 - doCONNECT
     4 - getResponse
+    5 - MyLock
 */
 #define HTTPDEVELOPMENT 0
 
@@ -59,13 +60,13 @@ class MyLock
     {
         temp->lock();
         mtx = temp;
-        std::cout<<"\n\nLOCKED !!!!!!!!\n\n";
+        if (HTTPDEVELOPMENT == 5) std::cout<<"\n\nLOCKED !!!!!!!!\n\n";
     }
 
     ~MyLock()
     {
         mtx->unlock();
-        std::cout<<"\n\nUNLOCKED !!!!!!!!\n\n";
+        if (HTTPDEVELOPMENT == 5) std::cout<<"\n\nUNLOCKED !!!!!!!!\n\n";
     }
 };
 //END_REF
@@ -288,8 +289,8 @@ class HTTPResponse : public HTTP
         size_t pos = temp.find("\r\n");
         if (pos == std::string::npos)
         {
-            std::cout << "Error parsing first line in response" << std::endl;
-            return;
+            if (HTTPDEVELOPMENT == 1) std::cout << "Error parsing first line in response" << std::endl;
+            return; // this return will make sure valid == false, so we can achieve 502 Bad Response
         }
         startline = temp.substr(0, pos);
 
@@ -371,14 +372,15 @@ class HTTPResponse : public HTTP
 //BEGIN_REF - https://leetcode.com/problems/lru-cache/discuss/45976/C%2B%2B11-code-74ms-Hash-table-%2B-List
 class MyCache {
     private:
-    typedef std::list<std::string> LIST;
-    typedef std::pair<HTTPResponse, LIST::iterator> PAIR;
-    typedef std::unordered_map<std::string, PAIR> MAP;
+    typedef std::list<std::string> LIST;    // List of response
+    typedef std::pair<HTTPResponse, LIST::iterator> PAIR;   // Data entry for the map, first is response and second is it's position in the used list
+    typedef std::unordered_map<std::string, PAIR> MAP;  // Map to map startline to (reponse + its position in the list)
 
     LIST used;
     MAP cache;
     size_t _capacity;
 
+    // Renew order for LRU
     void touch(MAP::iterator it) {
         std::string key = it->first;
 
@@ -392,18 +394,21 @@ class MyCache {
     public:
     MyCache(size_t capacity) : _capacity(capacity) {}
 
+    // Check whether response exist
     bool checkExist(std::string startline) {
         auto it = cache.find(startline);
         if (it == cache.end()) return false;
         else return true;
     }
 
+    // Get response
     HTTPResponse get(std::string startline) {
         auto it = cache.find(startline);
         touch(it);
         return it->second.first;
     }
 
+    // Put new response
     void put(std::string startline, HTTPResponse res) {
         auto it = cache.find(startline);
         if (it != cache.end()) touch(it);
@@ -430,16 +435,16 @@ int checkExpire(HTTPResponse response);
 class HTTPRequest : public HTTP
 {
   private:
-    int ID;
-    std::string method;
-    std::string url;
-    std::string port;
-    std::string hostaddr;
-    std::string IP;
-    std::ofstream log;
+    int ID; // ID of request
+    std::string method; // Method - GET POST CONNECT
+    std::string url;    // URL
+    std::string port;   // PORT
+    std::string hostaddr;   // Target host address
+    std::string IP; // Target host IP address
+    std::ofstream log;  // Log helper
 
   public:
-    static int amount;
+    static int amount;  // Total amount of request to generate ID
 
 
     HTTPRequest(std::vector<char> temp)
@@ -520,7 +525,7 @@ class HTTPRequest : public HTTP
         size_t pos = temp.find("\r\n");
         if (pos == std::string::npos)
         {
-            std::cout << "Error parsing first line in request" << std::endl;
+            if (HTTPDEVELOPMENT == 1) std::cout << "Error parsing first line in request" << std::endl;
             // THROW INFO
             throw "400";
         }
