@@ -10,6 +10,7 @@
 
 #define DEVELOPMENT 1                 // Development or production
 #define LOG "/var/log/erss/proxy.log" // Name and path of the log
+#define PORT "12345" // Default port 12345 as required
 
 int HTTPRequest::amount = 0;  // Total amount of request to manage ID
 
@@ -30,7 +31,7 @@ int main(int argc, char **argv) {
     std::cout << "Hostname access fail" << std::endl;
     exit(1);
   }
-  const char *port = "12345";
+  const char *port = PORT;
 
   memset(&host_info, 0, sizeof(host_info));
 

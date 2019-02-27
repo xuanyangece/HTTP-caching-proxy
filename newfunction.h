@@ -258,7 +258,7 @@ void return400(int client_fd) {
 */
 void return502(int client_fd) {
   std::cout << "Bad request" << std::endl;
-  std::string header("HTTP/1.1 502 Bad Request\r\nContent-Length: "
+  std::string header("HTTP/1.1 502 Bad Gateway\r\nContent-Length: "
                      "38\r\nConnection: close\r\nContent-Type: "
                      "text/html\r\n\r\n<html><body>Bad Gateway</body></html>\n");
   int len = send(client_fd, header.c_str(), header.length(), MSG_NOSIGNAL);
@@ -424,7 +424,6 @@ std::string getNow() {
   time_t now = time(0);
   struct tm tm = *gmtime(&now);
   strftime(buf, sizeof buf, "%a, %d %b %Y %H:%M:%S %Z", &tm);
-  printf("Time is: [%s]\n", buf);
 
   std::string ans(buf);
   return ans;
