@@ -4,6 +4,9 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
+#define HOSTNAME "vcm-8117.vm.duke.edu"
+#define PORT "8080"
+
 using namespace std;
 
 int main(int argc, char *argv[]) {
@@ -11,8 +14,8 @@ int main(int argc, char *argv[]) {
   int socket_fd;
   struct addrinfo host_info;
   struct addrinfo *host_info_list;
-  const char *hostname = "vcm-8117.vm.duke.edu";
-  const char *port = "8080";
+  const char *hostname = HOSTNAME;
+  const char *port = PORT;
 
   memset(&host_info, 0, sizeof(host_info));
 
