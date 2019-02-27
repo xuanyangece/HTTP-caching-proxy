@@ -355,14 +355,19 @@ void handlehttp(int reqfd) {
   }
 
   else {
+    /*
+      If the buffer cannot be parsed, it's a bad request, return 400
+    */
     try {
       HTTPRequest newreq(tempbuf);
+
       // Handle request
       newreq.handlereq(reqfd);
 
       close(reqfd);
     } catch (const char *msg) {
-      return404(reqfd);
+      if (msg == "400") return404(reqfd);
+      else return404(reqfd);
       close(reqfd);
     }
   }

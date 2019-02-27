@@ -94,7 +94,7 @@ class HTTP
                 if (colon == std::string::npos)
                 {
                     std::cout << "Error in format of header" << std::endl;
-                    throw "Header format exception";
+                    throw "400";
                 }
                 else
                 {
@@ -384,6 +384,7 @@ class HTTPRequest : public HTTP
   public:
     static int amount;
 
+
     HTTPRequest(std::vector<char> temp)
     {
         buffer = temp;
@@ -458,7 +459,7 @@ class HTTPRequest : public HTTP
         {
             std::cout << "Error parsing first line" << std::endl;
             // THROW INFO
-            throw "Request buffer format error";
+            throw "400";
         }
         startline = temp.substr(0, pos);
 
@@ -537,7 +538,7 @@ class HTTPRequest : public HTTP
         if (pos == std::string::npos)
         {
             std::cout << "Error in reading method" << std::endl;
-            throw "Error in reading method from request";
+            throw "400";
         }
 
         method = line.substr(0, pos);
@@ -548,7 +549,7 @@ class HTTPRequest : public HTTP
         if (pos == std::string::npos)
         {
             std::cout << "Error in reading url" << std::endl;
-            throw "Error in reading url from request";
+            throw "400";
         }
 
         url = line.substr(0, pos);
@@ -558,8 +559,8 @@ class HTTPRequest : public HTTP
         HTTPversion = line;
         if (HTTPversion != "HTTP/1.1")
         {
-            std::cout << "HTTP version not normal" << std::endl;
-            throw "Protocol not supported, only support HTTP/1.1";
+            std::cout << "Bad protocol format" << std::endl;
+            throw "400";
         }
     }
 
